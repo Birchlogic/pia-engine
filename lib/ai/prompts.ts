@@ -33,7 +33,8 @@ export function relationshipGraphPrompt(
 ): string {
     return `You are a privacy assessment analyst. Given the following extracted entities from multiple interview sessions for the "${verticalName}" vertical, construct a relationship graph.
 
-For each unique DATA_ELEMENT, determine based on the extracted entity relationships:
+For each unique DATA_ELEMENT, return an object with ALL of these fields:
+- data_element: the normalized name of the data element (string)
 - category: personal | sensitive_personal | non_personal | anonymized | pseudonymized
 - data_subjects: who the data is about (e.g., ["employees", "customers"])
 - collected_by: actors/roles that collect this data
@@ -62,7 +63,31 @@ Extracted entities:
 ${entitiesJson}
 ---
 
-Return a JSON object with the schema: { vertical_name: string, data_elements: [...] }`;
+Return a JSON object with this exact schema:
+{
+  "vertical_name": "string",
+  "data_elements": [
+    {
+      "data_element": "normalized name of the data element",
+      "category": "personal | sensitive_personal | non_personal | anonymized | pseudonymized",
+      "data_subjects": ["..."],
+      "collected_by": ["..."],
+      "collection_methods": ["..."],
+      "systems": ["..."],
+      "storage_locations": ["..."],
+      "processing_activities": ["..."],
+      "access_roles": ["..."],
+      "shared_with_internal": ["..."],
+      "shared_with_external": ["..."],
+      "cross_border": false,
+      "cross_border_details": "string or null",
+      "retention_info": "string or null",
+      "consent_info": "string or null",
+      "source_session_ids": ["..."],
+      "confidence": 0.9
+    }
+  ]
+}`;
 }
 
 export function classificationPrompt(
@@ -107,4 +132,61 @@ ${dataElements}
 ---
 
 Return a JSON object with the schema: { elements: [...] }`;
+}
+
+export function mermaidDFDPrompt(
+    matrixDataJson: string,
+    verticalName: string,
+    orgName: string
+): string {
+    return `You are a privacy data flow diagram expert. Generate a Mermaid flowchart diagram that visualizes the data flows described in the Data Matrix for the "${verticalName}" vertical of "${orgName}".
+
+The diagram must follow standard DFD conventions:
+- **External Entities**: People, roles, or external organizations that send/receive data (rectangles)
+- **Processes / Systems**: Internal systems, applications, or teams that process data (rounded rectangles or cylinders)
+- **Data Stores**: Databases, file systems, or storage locations (double-lined rectangles using [[...]])
+- **Channels**: Communication channels like email, phone, APIs (plain rectangles)
+
+Use Mermaid "flowchart LR" (left-to-right) syntax. Follow these rules:
+
+1. Use classDef for styling:
+   - ext: External entities (fill:#fff, stroke:#111)
+   - proc: Processes/systems (fill:#f6f6f6, stroke:#111)
+   - store: Data stores (fill:#ffffff, stroke:#111, stroke-dasharray: 4 3)
+   - chan: Channels (fill:#ffffff, stroke:#111)
+   - risk_high: High risk nodes (fill:#fef2f2, stroke:#ef4444, stroke-width:2px)
+   - risk_critical: Critical risk nodes (fill:#fef2f2, stroke:#dc2626, stroke-width:3px)
+
+2. Node ID rules:
+   - Use short PascalCase IDs (e.g., Customer, SalesforceCRM, HRDatabase)
+   - No spaces or special characters in IDs
+   - Use descriptive labels in quotes for display
+
+3. Edge labels should describe what data flows (e.g., |"Employee PII"|, |"Loan account data"|)
+
+4. Add comments (%%) to group sections: External entities, Channels, Processes/systems, Data stores, Flows
+
+5. For data stores that contain PII or sensitive data, add "<br/>PII Sensitive" or "<br/>PII Restricted" in the label
+
+6. Mark cross-border data flows with a comment or dashed styling
+
+7. Be comprehensive — include ALL data elements, systems, external parties, and storage locations from the matrix data
+
+8. Keep the diagram readable — group related flows, avoid crossing edges where possible
+
+Data Matrix rows (JSON):
+---
+${matrixDataJson}
+---
+
+Return a JSON object with this exact schema:
+{
+  "mermaid_code": "<the complete Mermaid flowchart code as a single string>",
+  "summary": "<brief description of the data flow diagram>",
+  "node_count": <number of nodes>,
+  "edge_count": <number of edges>,
+  "high_risk_flows": [<list of high/critical risk flow descriptions>],
+  "cross_border_flows": [<list of cross-border flow descriptions>],
+  "unencrypted_flows": [<list of unencrypted data flow descriptions>]
+}`;
 }

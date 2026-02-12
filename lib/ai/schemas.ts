@@ -126,6 +126,22 @@ export const RiskFactorsSchema = z.object({
 export type RiskFactors = z.infer<typeof RiskFactorsSchema>;
 
 // ──────────────────────────────────────────────
+// Mermaid DFD Generation
+// ──────────────────────────────────────────────
+
+export const MermaidDFDResultSchema = z.object({
+    mermaid_code: z.string().describe("Complete Mermaid flowchart code"),
+    summary: z.string().describe("Brief description of the data flow diagram"),
+    node_count: z.number().describe("Number of nodes in the diagram"),
+    edge_count: z.number().describe("Number of edges in the diagram"),
+    high_risk_flows: z.array(z.string()).describe("High/critical risk flow descriptions"),
+    cross_border_flows: z.array(z.string()).describe("Cross-border flow descriptions"),
+    unencrypted_flows: z.array(z.string()).describe("Unencrypted data flow descriptions"),
+});
+
+export type MermaidDFDResult = z.infer<typeof MermaidDFDResultSchema>;
+
+// ──────────────────────────────────────────────
 // Pipeline Progress Events
 // ──────────────────────────────────────────────
 
@@ -136,6 +152,12 @@ export const PipelineStepEnum = z.enum([
     "scoring",
     "deduplicating",
     "persisting",
+    // DFD pipeline steps
+    "loading",
+    "building_nodes",
+    "building_edges",
+    "generating_mermaid",
+    "layouting",
     "done",
     "error",
 ]);

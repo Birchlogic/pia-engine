@@ -30,6 +30,103 @@ import { toast } from "sonner";
 import { DataMatrixTable } from "@/components/data-matrix/data-matrix-table";
 import { GenerationProgress } from "@/components/data-matrix/generation-progress";
 import type { MatrixRow } from "@/components/data-matrix/matrix-columns";
+import { MermaidDFDViewer, type MermaidDFDData } from "@/components/dfd/mermaid-dfd-viewer";
+import { DFDGenerationProgress } from "@/components/dfd/dfd-generation-progress";
+
+// ── Sample Mermaid DFD for fallback preview ──
+const SAMPLE_MERMAID_DFD: MermaidDFDData = {
+    id: "sample",
+    status: "sample",
+    createdAt: new Date().toISOString(),
+    mermaidCode: `flowchart LR
+  classDef ext fill:#fff,stroke:#111,stroke-width:1px;
+  classDef proc fill:#f6f6f6,stroke:#111,stroke-width:1px;
+  classDef store fill:#ffffff,stroke:#111,stroke-width:1px,stroke-dasharray: 4 3;
+  classDef chan fill:#ffffff,stroke:#111,stroke-width:1px;
+
+  %% External entities
+  Customer["Customer / Caller"]:::ext
+  DSA["DSA Caller"]:::ext
+
+  %% Channels
+  TollFree["Toll-free number"]:::chan
+  WhatsApp["WhatsApp"]:::chan
+  Email["Email"]:::chan
+
+  %% Processes / systems
+  Ameyo[("Ameyo IVR / Telephony")]:::proc
+  CC["Customer Care Team"]:::proc
+  SF[("Salesforce CRM")]:::proc
+
+  %% Internal teams
+  Sales["Sales Team"]:::proc
+  Retention["Retention Team"]:::proc
+  FieldAudit["Field Audit and Anti-Fraud Team"]:::proc
+  Quality["Quality Team"]:::proc
+
+  %% Data stores (logical)
+  SF_Contact[["Customer Contact Details<br/>PII Sensitive - consent required"]]:::store
+  SF_Loan[["Loan Account Information<br/>PII Sensitive - consent required"]]:::store
+  SF_Case[["Cases and Service Requests<br/>PII Sensitive - consent required"]]:::store
+  SF_Feedback[["Customer Feedback<br/>PII Sensitive - consent required"]]:::store
+  SF_Logs[["Customer Interaction Logs<br/>PII Sensitive - consent required"]]:::store
+
+  ExcelOD[["Compliance Questionnaire<br/>Excel / OneDrive<br/>PII Restricted - consent required"]]:::store
+
+  %% Flows: inbound contact
+  Customer -->|"Call"| TollFree
+  Customer -->|"Message"| WhatsApp
+  Customer -->|"Email"| Email
+
+  TollFree -->|"Inbound call and caller metadata"| Ameyo
+  WhatsApp -->|"Customer message content"| CC
+  Email -->|"Customer email content"| CC
+
+  %% IVR routing and handling
+  Ameyo -->|"Route call (IVR option selection)"| CC
+  Ameyo <-->|"Loan info lookup / context"| SF
+
+  %% New inquiry and DSA routing
+  Ameyo -->|"If new loan inquiry"| Sales
+  DSA -->|"Call"| TollFree
+
+  %% Case creation and updates
+  CC -->|"Create or update case"| SF
+  CC -->|"Status update / next steps"| Customer
+
+  %% Loan closure path
+  Ameyo -->|"Loan closure option"| Retention
+  Retention -->|"Resolution / certificate status"| SF
+  Retention -->|"Outcome / response"| Customer
+
+  %% Salesforce logical stores
+  SF --> SF_Contact
+  SF --> SF_Loan
+  SF --> SF_Case
+  SF --> SF_Feedback
+  SF --> SF_Logs
+
+  %% Compliance calling workflow
+  CC -->|"Outbound compliance call + questionnaire collection"| Customer
+  CC -->|"Store questionnaire responses"| ExcelOD
+  ExcelOD -->|"Transfer compliance information"| FieldAudit
+
+  %% Quality audits
+  Quality -->|"Audit customer care calls"| CC
+  Quality -->|"Review interaction evidence"| SF_Logs`,
+    summary: "Sample Data Flow Diagram showing Customer Care vertical data flows including inbound contact channels, IVR routing, case management via Salesforce CRM, loan closure workflows, compliance questionnaire handling, and quality audit processes.",
+    nodeCount: 13,
+    edgeCount: 20,
+    highRiskFlows: [
+        "Customer PII flows through unencrypted WhatsApp channel",
+        "Compliance questionnaire data stored in Excel/OneDrive without access controls",
+    ],
+    crossBorderFlows: [],
+    unencryptedFlows: [
+        "WhatsApp message content to Customer Care Team",
+        "Email content to Customer Care Team",
+    ],
+};
 
 type Session = {
     id: string;
@@ -110,6 +207,12 @@ export default function VerticalWorkspacePage() {
     const [matrixRows, setMatrixRows] = useState<MatrixRow[]>([]);
     const [matrixLoaded, setMatrixLoaded] = useState(false);
 
+    // DFD generation
+    const [dfdGenerating, setDfdGenerating] = useState(false);
+    const [dfdJobId, setDfdJobId] = useState<string | null>(null);
+    const [dfdGraph, setDfdGraph] = useState<MermaidDFDData | null>(null);
+    const [dfdLoaded, setDfdLoaded] = useState(false);
+
     const fetchVertical = useCallback(async () => {
         const res = await fetch(`/api/verticals/${verticalId}`);
         if (res.ok) setVertical(await res.json());
@@ -125,10 +228,20 @@ export default function VerticalWorkspacePage() {
         setMatrixLoaded(true);
     }, [verticalId]);
 
+    const fetchDFD = useCallback(async () => {
+        const res = await fetch(`/api/dfd?verticalId=${verticalId}`);
+        if (res.ok) {
+            const data = await res.json();
+            setDfdGraph(data.graph || null);
+        }
+        setDfdLoaded(true);
+    }, [verticalId]);
+
     useEffect(() => {
         fetchVertical();
         fetchMatrixRows();
-    }, [fetchVertical, fetchMatrixRows]);
+        fetchDFD();
+    }, [fetchVertical, fetchMatrixRows, fetchDFD]);
 
     const handleCreateSession = async () => {
         if (!newForm.rawTextNotes.trim()) {
@@ -217,6 +330,22 @@ export default function VerticalWorkspacePage() {
         }
     };
 
+    const handleGenerateDFD = async () => {
+        setDfdGenerating(true);
+        const res = await fetch("/api/ai/generate-dfd", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ verticalId }),
+        });
+        if (res.ok) {
+            const data = await res.json();
+            setDfdJobId(data.jobId);
+        } else {
+            toast.error("Failed to start DFD generation");
+            setDfdGenerating(false);
+        }
+    };
+
     const toggleExpanded = (id: string) => {
         setExpandedSessions((prev) => {
             const next = new Set(prev);
@@ -245,6 +374,7 @@ export default function VerticalWorkspacePage() {
 
     const finalizedSessions = vertical.sessions.filter((s) => s.status === "finalized");
     const hasMatrix = matrixRows.length > 0;
+    const hasDfd = dfdGraph !== null;
 
     return (
         <div className="space-y-6">
@@ -290,8 +420,8 @@ export default function VerticalWorkspacePage() {
                     <TabsTrigger value="matrix">
                         Data Matrix {hasMatrix ? `(${matrixRows.length})` : ""}
                     </TabsTrigger>
-                    <TabsTrigger value="dfd" disabled={vertical.assessmentStatus !== "dfd_generated"}>
-                        DFD
+                    <TabsTrigger value="dfd">
+                        DFD {hasDfd ? "✓" : ""}
                     </TabsTrigger>
                 </TabsList>
 
@@ -611,12 +741,71 @@ export default function VerticalWorkspacePage() {
                 </TabsContent>
 
                 {/* ────────────── DFD Tab ────────────── */}
-                <TabsContent value="dfd">
-                    <Card>
-                        <CardContent className="py-8 text-center">
-                            <p className="text-muted-foreground">DFD canvas coming in Sprint 4</p>
-                        </CardContent>
-                    </Card>
+                <TabsContent value="dfd" className="space-y-4">
+                    {/* DFD generation trigger */}
+                    {hasMatrix && (
+                        <div className="flex items-center justify-between">
+                            <p className="text-sm text-muted-foreground">
+                                {hasDfd
+                                    ? "Data Flow Diagram generated from the Data Matrix."
+                                    : "Generate a Data Flow Diagram from the Data Matrix."}
+                            </p>
+                            <Button
+                                variant="default"
+                                disabled={dfdGenerating}
+                                onClick={handleGenerateDFD}
+                            >
+                                {hasDfd ? "Regenerate DFD" : "Generate DFD"}
+                            </Button>
+                        </div>
+                    )}
+
+                    {/* DFD generation progress */}
+                    {dfdGenerating && dfdJobId && (
+                        <DFDGenerationProgress
+                            jobId={dfdJobId}
+                            onComplete={() => {
+                                setDfdGenerating(false);
+                                setDfdJobId(null);
+                                fetchVertical();
+                                fetchDFD();
+                                toast.success("DFD generated!");
+                            }}
+                            onError={(msg) => {
+                                setDfdGenerating(false);
+                                setDfdJobId(null);
+                                toast.error(`DFD generation failed: ${msg}`);
+                            }}
+                        />
+                    )}
+
+                    {/* DFD canvas, sample fallback, or loading state */}
+                    {!dfdLoaded ? (
+                        <div className="space-y-4">
+                            <Skeleton className="h-20 w-full" />
+                            <Skeleton className="h-[500px] w-full" />
+                        </div>
+                    ) : hasDfd ? (
+                        <MermaidDFDViewer graph={dfdGraph} />
+                    ) : !dfdGenerating ? (
+                        <div className="space-y-4">
+                            <Card className="border-dashed border-amber-500/30 bg-amber-500/5">
+                                <CardContent className="py-3 px-4 flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <Badge variant="outline" className="text-amber-500 border-amber-500/30 text-xs">
+                                            Sample Preview
+                                        </Badge>
+                                        <p className="text-sm text-muted-foreground">
+                                            {hasMatrix
+                                                ? "This is a sample DFD. Click \"Generate DFD\" above to create one from your Data Matrix."
+                                                : "This is a sample DFD. Generate a Data Matrix first from the Sessions tab."}
+                                        </p>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                            <MermaidDFDViewer graph={SAMPLE_MERMAID_DFD} />
+                        </div>
+                    ) : null}
                 </TabsContent>
             </Tabs>
 
