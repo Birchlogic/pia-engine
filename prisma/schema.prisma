@@ -1,0 +1,397 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────
+
+enum UserRole {
+  admin
+  senior_assessor
+  analyst
+}
+
+enum SizeBand {
+  micro
+  small
+  medium
+  large
+  enterprise
+}
+
+enum AssessmentType {
+  full_pia
+  dpia
+  ai_governance
+  custom
+}
+
+enum ProjectStatus {
+  setup
+  in_progress
+  review
+  completed
+  archived
+}
+
+enum AssessmentStatus {
+  not_started
+  in_progress
+  matrix_generated
+  matrix_approved
+  dfd_generated
+}
+
+enum SessionStatus {
+  draft
+  finalized
+}
+
+enum FileType {
+  transcript_doc
+  audio
+  video
+  policy_doc
+  architecture_diagram
+  contract
+  other
+}
+
+enum TranscriptionStatus {
+  not_applicable
+  pending
+  processing
+  completed
+  failed
+}
+
+enum DataCategory {
+  personal
+  sensitive_personal
+  non_personal
+  anonymized
+  pseudonymized
+}
+
+enum EncryptionStatus {
+  yes
+  no
+  partial
+  unknown
+}
+
+enum MatrixRowStatus {
+  draft
+  under_review
+  approved
+}
+
+enum MatrixStatus {
+  draft
+  under_review
+  approved
+}
+
+enum DFDType {
+  vertical
+  master
+}
+
+enum DFDStatus {
+  draft
+  approved
+}
+
+enum DFDNodeType {
+  data_source
+  processing_activity
+  data_store
+  external_entity
+  system_application
+  vertical_owner
+}
+
+enum RiskLevel {
+  low
+  medium
+  high
+  critical
+}
+
+enum GeneratedBy {
+  ai
+  manual
+}
+
+// ─── Models ──────────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  password  String
+  role      UserRole @default(analyst)
+  orgId     String?  @map("org_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  organization         Organization?    @relation(fields: [orgId], references: [id])
+  createdOrganizations Organization[]   @relation("OrgCreatedBy")
+  createdProjects      Project[]        @relation("ProjectCreatedBy")
+  createdVerticals     Vertical[]       @relation("VerticalCreatedBy")
+  createdSessions      InterviewSession[] @relation("SessionCreatedBy")
+  uploadedFiles        SessionFile[]     @relation("FileUploadedBy")
+  reviewedMatrixRows   DataMatrixRow[]   @relation("MatrixRowReviewedBy")
+  approvedMatrices     DataMatrix[]      @relation("MatrixApprovedBy")
+  approvedDFDs         DFDGraph[]        @relation("DFDApprovedBy")
+
+  @@map("users")
+}
+
+model Organization {
+  id              String   @id @default(uuid())
+  name            String
+  industry        String?
+  jurisdiction    String?
+  regulatoryScope String[] @map("regulatory_scope")
+  sizeBand        SizeBand? @map("size_band")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  createdById     String   @map("created_by")
+
+  // Relations
+  projects  Project[]
+  users     User[]
+  creator   User @relation("OrgCreatedBy", fields: [createdById], references: [id])
+
+  @@map("organizations")
+}
+
+model Project {
+  id                    String         @id @default(uuid())
+  orgId                 String         @map("org_id")
+  name                  String
+  description           String?
+  applicableRegulations String[]       @map("applicable_regulations")
+  assessmentType        AssessmentType @default(full_pia) @map("assessment_type")
+  targetCompletionDate  DateTime?      @map("target_completion_date")
+  status                ProjectStatus  @default(setup)
+  createdAt             DateTime       @default(now()) @map("created_at")
+  updatedAt             DateTime       @updatedAt @map("updated_at")
+  createdById           String         @map("created_by")
+
+  // Relations
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  creator      User         @relation("ProjectCreatedBy", fields: [createdById], references: [id])
+  verticals    Vertical[]
+  dfdGraphs    DFDGraph[]
+
+  @@map("projects")
+}
+
+model Vertical {
+  id               String           @id @default(uuid())
+  projectId        String           @map("project_id")
+  name             String
+  description      String?
+  headName         String?          @map("head_name")
+  headRole         String?          @map("head_role")
+  headContact      String?          @map("head_contact")
+  assessmentStatus AssessmentStatus @default(not_started) @map("assessment_status")
+  sortOrder        Int              @default(0) @map("sort_order")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+  createdById      String           @map("created_by")
+
+  // Relations
+  project    Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  creator    User               @relation("VerticalCreatedBy", fields: [createdById], references: [id])
+  sessions   InterviewSession[]
+  matrixRows DataMatrixRow[]
+  dataMatrix DataMatrix?
+  dfdGraphs  DFDGraph[]
+
+  @@map("verticals")
+}
+
+model InterviewSession {
+  id                    String        @id @default(uuid())
+  verticalId            String        @map("vertical_id")
+  sessionDate           DateTime      @map("session_date")
+  sessionNumber         Int           @map("session_number")
+  durationMinutes       Int?          @map("duration_minutes")
+  interviewerNames      String[]      @map("interviewer_names")
+  intervieweeNames      String[]      @map("interviewee_names")
+  intervieweeRoles      String[]      @map("interviewee_roles")
+  assessmentCriteriaTags String[]     @map("assessment_criteria_tags")
+  status                SessionStatus @default(draft)
+  version               Int           @default(1)
+  parentVersionId       String?       @map("parent_version_id")
+  rawTextNotes          String?       @map("raw_text_notes")
+  aiTranscript          String?       @map("ai_transcript")
+  aiSummary             String?       @map("ai_summary")
+  createdAt             DateTime      @default(now()) @map("created_at")
+  updatedAt             DateTime      @updatedAt @map("updated_at")
+  createdById           String        @map("created_by")
+
+  // Relations
+  vertical      Vertical          @relation(fields: [verticalId], references: [id], onDelete: Cascade)
+  creator       User              @relation("SessionCreatedBy", fields: [createdById], references: [id])
+  parentVersion InterviewSession? @relation("SessionVersionChain", fields: [parentVersionId], references: [id])
+  childVersions InterviewSession[] @relation("SessionVersionChain")
+  files         SessionFile[]
+
+  @@map("interview_sessions")
+}
+
+model SessionFile {
+  id                  String              @id @default(uuid())
+  sessionId           String              @map("session_id")
+  fileName            String              @map("file_name")
+  fileType            FileType            @map("file_type")
+  mimeType            String              @map("mime_type")
+  fileSizeBytes       BigInt              @map("file_size_bytes")
+  storagePath         String              @map("storage_path")
+  transcriptionStatus TranscriptionStatus @default(not_applicable) @map("transcription_status")
+  transcribedText     String?             @map("transcribed_text")
+  createdAt           DateTime            @default(now()) @map("created_at")
+  uploadedById        String              @map("uploaded_by")
+
+  // Relations
+  session    InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  uploadedBy User             @relation("FileUploadedBy", fields: [uploadedById], references: [id])
+
+  @@map("session_files")
+}
+
+model DataMatrixRow {
+  id                      String          @id @default(uuid())
+  verticalId              String          @map("vertical_id")
+  dataElementName         String          @map("data_element_name")
+  dataCategory            DataCategory    @map("data_category")
+  dataSubCategory         String?         @map("data_sub_category")
+  dataSubjects            String[]        @map("data_subjects")
+  sourceOfData            String?         @map("source_of_data")
+  collectionMethod        String?         @map("collection_method")
+  purposeOfProcessing     String?         @map("purpose_of_processing")
+  legalBasis              String?         @map("legal_basis")
+  consentMechanism        Json?           @map("consent_mechanism")
+  processingTypes         String[]        @map("processing_types")
+  systemsApplications     String[]        @map("systems_applications")
+  storageLocation         String?         @map("storage_location")
+  storageFormat           String?         @map("storage_format")
+  encryptionAtRest        EncryptionStatus @default(unknown) @map("encryption_at_rest")
+  encryptionInTransit     EncryptionStatus @default(unknown) @map("encryption_in_transit")
+  retentionPeriod         String?         @map("retention_period")
+  retentionCompliant      Boolean?        @map("retention_compliant")
+  deletionMethod          String?         @map("deletion_method")
+  accessRoles             Json?           @map("access_roles")
+  dataRecipientsInternal  String[]        @map("data_recipients_internal")
+  dataRecipientsExternal  String[]        @map("data_recipients_external")
+  thirdPartyDetails       Json?           @map("third_party_details")
+  crossBorderTransfer     Boolean         @default(false) @map("cross_border_transfer")
+  crossBorderDetails      Json?           @map("cross_border_details")
+  dataOwner               String?         @map("data_owner")
+  riskScore               Int             @default(1) @map("risk_score")
+  confidenceScore         Float           @default(0) @map("confidence_score")
+  gapsFlagged             String[]        @map("gaps_flagged")
+  sourceSessionIds        String[]        @map("source_session_ids")
+  status                  MatrixRowStatus @default(draft)
+  reviewedById            String?         @map("reviewed_by")
+  reviewedAt              DateTime?       @map("reviewed_at")
+  generatedBy             GeneratedBy     @default(ai) @map("generated_by")
+  createdAt               DateTime        @default(now()) @map("created_at")
+  updatedAt               DateTime        @updatedAt @map("updated_at")
+
+  // Relations
+  vertical   Vertical @relation(fields: [verticalId], references: [id], onDelete: Cascade)
+  reviewer   User?    @relation("MatrixRowReviewedBy", fields: [reviewedById], references: [id])
+
+  @@map("data_matrix_rows")
+}
+
+model DataMatrix {
+  id                 String       @id @default(uuid())
+  verticalId         String       @unique @map("vertical_id")
+  status             MatrixStatus @default(draft)
+  approvedById       String?      @map("approved_by")
+  approvedAt         DateTime?    @map("approved_at")
+  generationMetadata Json?        @map("generation_metadata")
+  createdAt          DateTime     @default(now()) @map("created_at")
+  updatedAt          DateTime     @updatedAt @map("updated_at")
+
+  // Relations
+  vertical   Vertical @relation(fields: [verticalId], references: [id], onDelete: Cascade)
+  approvedBy User?    @relation("MatrixApprovedBy", fields: [approvedById], references: [id])
+
+  @@map("data_matrices")
+}
+
+model DFDGraph {
+  id                   String    @id @default(uuid())
+  projectId            String    @map("project_id")
+  verticalId           String?   @map("vertical_id")
+  dfdType              DFDType   @map("dfd_type")
+  graphData            Json?     @map("graph_data")
+  layoutConfig         Json?     @map("layout_config")
+  status               DFDStatus @default(draft)
+  approvedById         String?   @map("approved_by")
+  approvedAt           DateTime? @map("approved_at")
+  generatedFromMatrixIds String[] @map("generated_from_matrix_ids")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  project    Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  vertical   Vertical? @relation(fields: [verticalId], references: [id])
+  approvedBy User?     @relation("DFDApprovedBy", fields: [approvedById], references: [id])
+  nodes      DFDNode[]
+  edges      DFDEdge[]
+
+  @@map("dfd_graphs")
+}
+
+model DFDNode {
+  id         String      @id @default(uuid())
+  dfdGraphId String      @map("dfd_graph_id")
+  nodeType   DFDNodeType @map("node_type")
+  label      String
+  metadata   Json?
+  positionX  Float       @map("position_x")
+  positionY  Float       @map("position_y")
+  riskLevel  RiskLevel?  @map("risk_level")
+  verticalId String?     @map("vertical_id")
+
+  // Relations
+  dfdGraph    DFDGraph  @relation(fields: [dfdGraphId], references: [id], onDelete: Cascade)
+  sourceEdges DFDEdge[] @relation("EdgeSource")
+  targetEdges DFDEdge[] @relation("EdgeTarget")
+
+  @@map("dfd_nodes")
+}
+
+model DFDEdge {
+  id                 String    @id @default(uuid())
+  dfdGraphId         String    @map("dfd_graph_id")
+  sourceNodeId       String    @map("source_node_id")
+  targetNodeId       String    @map("target_node_id")
+  dataElements       String[]  @map("data_elements")
+  dataClassification String?   @map("data_classification")
+  processingType     String?   @map("processing_type")
+  isEncrypted        Boolean   @default(false) @map("is_encrypted")
+  isCrossBorder      Boolean   @default(false) @map("is_cross_border")
+  riskLevel          RiskLevel @default(low) @map("risk_level")
+  metadata           Json?
+
+  // Relations
+  dfdGraph   DFDGraph @relation(fields: [dfdGraphId], references: [id], onDelete: Cascade)
+  sourceNode DFDNode  @relation("EdgeSource", fields: [sourceNodeId], references: [id], onDelete: Cascade)
+  targetNode DFDNode  @relation("EdgeTarget", fields: [targetNodeId], references: [id], onDelete: Cascade)
+
+  @@map("dfd_edges")
+}
