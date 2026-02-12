@@ -40,7 +40,7 @@ export async function PUT(request: Request) {
         where: { id: { in: rowIds } },
         data: {
             status,
-            reviewedBy: user.id,
+            reviewedById: user.id,
             reviewedAt: new Date(),
         },
     });

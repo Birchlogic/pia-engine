@@ -36,7 +36,7 @@ export async function PUT(
         where: { id: rowId },
         data: {
             ...body,
-            reviewedBy: user.id,
+            reviewedById: user.id,
             reviewedAt: new Date(),
         },
     });

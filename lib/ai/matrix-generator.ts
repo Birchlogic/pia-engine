@@ -1,4 +1,5 @@
 import prisma from "@/lib/db/prisma";
+import { Prisma } from "@prisma/client";
 import { extractEntitiesBatch } from "./entity-extraction";
 import { buildRelationshipGraph } from "./relationship-graph";
 import { classifyDataElements } from "./classification";
@@ -138,7 +139,7 @@ export async function generateDataMatrix(options: GenerateMatrixOptions) {
                 collectionMethod: el.collection_method,
                 purposeOfProcessing: el.purpose_of_processing,
                 legalBasis: el.legal_basis,
-                consentMechanism: el.consent_mechanism as Record<string, unknown> | null,
+                consentMechanism: el.consent_mechanism ?? Prisma.DbNull,
                 processingTypes: el.processing_types,
                 systemsApplications: el.systems_applications,
                 storageLocation: el.storage_location,
@@ -148,12 +149,12 @@ export async function generateDataMatrix(options: GenerateMatrixOptions) {
                 retentionPeriod: el.retention_period,
                 retentionCompliant: el.retention_compliant,
                 deletionMethod: el.deletion_method,
-                accessRoles: el.access_roles as unknown as Record<string, unknown>,
+                accessRoles: el.access_roles as unknown as Prisma.InputJsonValue,
                 dataRecipientsInternal: el.data_recipients_internal,
                 dataRecipientsExternal: el.data_recipients_external,
-                thirdPartyDetails: el.third_party_details as unknown as Record<string, unknown> | null,
+                thirdPartyDetails: el.third_party_details ? (el.third_party_details as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
                 crossBorderTransfer: el.cross_border_transfer,
-                crossBorderDetails: el.cross_border_details as Record<string, unknown> | null,
+                crossBorderDetails: el.cross_border_details ? (el.cross_border_details as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
                 dataOwner: el.data_owner,
                 riskScore: el.risk.final_score,
                 confidenceScore: el.confidence_score,
