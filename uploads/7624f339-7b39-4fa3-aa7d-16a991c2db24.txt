@@ -1,0 +1,143 @@
+INTERVIEW TRANSCRIPT
+Project: DPDPA Compliance Assessment 2026
+Department: Human Resources
+Session: 1 of 5 — Kickoff & Departmental Overview
+Date: Monday, 13 January 2026
+Time: 10:00 AM – 11:15 AM IST
+Location: Client HQ, Conference Room 3B (In-Person)
+Interviewer: Priya Nair (Senior Privacy Analyst, Birchlogic)
+Interviewee: Meena Sharma (VP – Human Resources)
+Note-taker: Rohan Desai (Privacy Analyst, Birchlogic)
+Recording: Audio recorded with consent (File: HR_S1_audio_13Jan.m4a)
+Assessment Criteria: Departmental Overview, Data Collection Practices, Organizational Structure
+
+--- TRANSCRIPT BEGINS ---
+
+[00:00:12] Priya Nair: Good morning Meena, thank you for taking the time. As we discussed in the pre-engagement call, we're conducting a privacy impact assessment across your business verticals as part of the DPDPA readiness exercise. Today's session is really about getting the lay of the land for HR. We want to understand what your department does, how it's structured, what data flows in and out, and who the key people are that we should speak to in follow-up sessions.
+
+[00:00:38] Meena Sharma: Good morning Priya, Rohan. Happy to help. We've been expecting this for a while actually. The board has been pushing for DPDPA compliance since Q3 last year, so this is overdue in my opinion.
+
+[00:00:52] Priya Nair: That's great to hear. Let's start with the basics. Can you walk me through how HR is structured here?
+
+[00:01:01] Meena Sharma: Sure. So the HR department broadly breaks down into three functions. First is Talent Acquisition, which is recruitment end to end. Second is HR Operations, which covers everything post-joining — payroll, benefits, insurance, compliance, employee records, the works. Third is Training and Development, which handles onboarding programs, skill development, and external partner training.
+
+[00:01:32] Priya Nair: And how does the reporting work? Who reports to whom?
+
+[00:01:36] Meena Sharma: I oversee the entire department. Reporting into me I have Aditya who heads up Talent Acquisition for Area Managers and above, all HQ hiring. Then there's Mr. Abc — he handles recruitment for the field force, meaning Loan Officers and Branch Managers. HR Ops is headed by Sunita, she manages a team of about six people. Training is directly under me, I handle strategy and the VP HR executes the training calendar.
+
+[00:02:15] Priya Nair: OK, that's helpful. Now for this assessment, we'll need to go deep into each of those three functions. But today let's get the overview. Starting with Talent Acquisition — what's the end-to-end journey of bringing someone into the organization?
+
+[00:02:31] Meena Sharma: Right, so it starts with the business communicating a requirement. That typically comes through email or sometimes just a phone call — there's no formal requisition system, no ticketing. Aditya or Abc will pick it up depending on the level. Sourcing happens through job portals — LinkedIn, Naukri are the primary ones — plus external recruitment consultants and internal employee referrals.
+
+[00:03:02] Priya Nair: When you say internal referrals, is there a formal referral program?
+
+[00:03:06] Meena Sharma: There is, yes. Employees can refer candidates and if the person gets hired and stays beyond probation, the referring employee gets a bonus. The referral details are tracked in a spreadsheet — name of the referee, candidate name, position, date of referral, status. I think Aditya maintains that.
+
+[00:03:28] Priya Nair: And the referral spreadsheet, where is that stored?
+
+[00:03:31] Meena Sharma: OneDrive. Aditya has it in his OneDrive folder. I don't think it's on any shared system.
+
+[00:03:40] Rohan Desai: Just to clarify, so the referral data which contains employee names and candidate names, that's sitting in a personal OneDrive folder, not a shared drive or the HRIS?
+
+[00:03:50] Meena Sharma: That's correct. I know it's not ideal. A lot of our data is like that honestly — some in the HRIS, some in emails, some in individual OneDrive folders.
+
+[00:04:03] Priya Nair: That's actually very common, Meena, and it's exactly the kind of thing this assessment is designed to surface. Let's keep going. After sourcing, what happens?
+
+[00:04:12] Meena Sharma: Resumes are shared with the business teams via email. If the business shortlists a candidate, interviews are scheduled on Microsoft Teams. First round is with the L1 manager, second round with the L2 manager. Sometimes there's a third round depending on seniority. All of this coordination happens over email.
+
+[00:04:38] Priya Nair: Are the MS Teams interviews recorded?
+
+[00:04:41] Meena Sharma: No, we don't record interviews. At least not as a policy. I can't say whether individual hiring managers have ever hit the record button, but there's no organizational mandate to record.
+
+[00:04:55] Priya Nair: Good, that's important to note. Now post-selection, what happens with documentation?
+
+[00:05:02] Meena Sharma: Once a candidate is selected, we collect what we call KYC documents. That includes Aadhaar card, PAN card, driving license — the DL is specifically for sales profiles — educational certificates and marksheets, previous salary slips, increment letters, and photographs. For certain roles we also ask for experience certificates from previous employers.
+
+[00:05:30] Priya Nair: That's quite a comprehensive set. How are these documents collected?
+
+[00:05:34] Meena Sharma: Email. The candidate sends scanned copies to the TA team and sometimes they're collected physically on the day of joining. Physical copies are filed in a manila folder and stored in the HR filing cabinets. Digital copies stay in the email and eventually get uploaded to the HRIS.
+
+[00:05:55] Rohan Desai: Sorry, when you say eventually, how long does that gap typically last? Between receiving the documents via email and uploading to the HRIS?
+
+[00:06:05] Meena Sharma: Honestly? It varies. Sometimes it's same day, sometimes it takes a week or two. Depends on how busy the Ops team is. During peak hiring months it can pile up.
+
+[00:06:18] Priya Nair: And during that gap, the documents are sitting in someone's email inbox?
+
+[00:06:22] Meena Sharma: Yes.
+
+[00:06:24] Priya Nair: Understood. What happens after document collection?
+
+[00:06:28] Meena Sharma: The documents are shared with the Operations team — Sunita's team — who run a CIBIL check. The CIBIL check is important because we're in the financial services space. Can't have people with poor credit history working in lending operations.
+
+[00:06:45] Priya Nair: How does the CIBIL check work? Is it an API integration or manual?
+
+[00:06:50] Meena Sharma: I believe it's semi-manual. Sunita's team sends the details — PAN number and name primarily — to get the CIBIL score pulled. I'm not 100% sure of the mechanics. You should ask Sunita about that.
+
+[00:07:05] Priya Nair: We will. What data is collected after the CIBIL check clears?
+
+[00:07:09] Meena Sharma: Additional personal details. Family information — spouse name, children, parents' names. Nominee details for insurance and PF. Geographic data like permanent address, hometown, current address. Blood group. Emergency contact details — name, relationship, phone number.
+
+[00:07:35] Priya Nair: Blood group is interesting. Why do you collect that?
+
+[00:07:38] Meena Sharma: It's for the employee ID card and emergency medical situations. We have field staff across the country, sometimes in remote areas. If there's an accident, having blood group on file helps.
+
+[00:07:53] Priya Nair: Makes sense. And this data, the family details, nominees, blood group — where does all of this end up?
+
+[00:07:59] Meena Sharma: HRIS primarily. But again, the initial collection happens over email. Forms are sent to the candidate, they fill them out and email them back. The Ops team then enters it into the HRIS.
+
+[00:08:15] Priya Nair: OK. After all this data collection, what triggers the offer letter?
+
+[00:08:20] Meena Sharma: Salary negotiation happens after the CIBIL check clears. Aditya or Abc negotiate with the candidate. The final salary has to be approved by the VP HR and the CHRO. Once approved, all the documents and the approved salary details go to HR Ops, and they generate and release the offer letter.
+
+[00:08:45] Priya Nair: Is the offer letter system automated or manual?
+
+[00:08:48] Meena Sharma: Semi-automated. There's a template in the HRIS. Ops team fills in the details — name, designation, CTC breakdown, reporting manager, joining date — and the system generates the PDF. It's sent to the candidate via email.
+
+[00:09:07] Priya Nair: Great. Let me shift to the post-joining process. You mentioned onboarding earlier.
+
+[00:09:14] Meena Sharma: Yes. Joining days are restricted to Mondays and Thursdays. If someone needs to join on a different day, it requires special approval from the CHRO. All employees are on-roll — we don't use contract staffing for permanent positions. On the joining day, the Ops team handles all the paperwork, ID card creation — actually the ID card details are shared with the Admin team via email, they produce the physical cards. The employee is set up on the HRIS, gets system access, email accounts, everything.
+
+[00:09:50] Priya Nair: For ID cards, what information goes on them?
+
+[00:09:53] Meena Sharma: Photo, name, employee ID, designation, blood group, and there's a barcode or QR code for office access. The Admin team handles the printing.
+
+[00:10:08] Priya Nair: And the data shared with Admin for ID cards, is that through a structured feed from HRIS or manual?
+
+[00:10:14] Meena Sharma: Email. HR Ops sends an email to the Admin team with the details and the photo.
+
+[00:10:22] Priya Nair: Meena, let me ask you a broader question. In your view, what are the biggest data handling risks or concerns you have within HR?
+
+[00:10:32] Meena Sharma: Honestly? The biggest concern is that too much sensitive data moves through email. Aadhaar copies, PAN cards, salary information — it's all going back and forth in email attachments. We don't have DLP in place. We don't encrypt attachments. If someone's email gets compromised, they could potentially access hundreds of employee documents. The second concern is retention. We don't have a formal data retention policy for HR data. We keep everything forever essentially. I have emails from five years ago with candidate documents still sitting in my inbox. Third, the physical files. We have filing cabinets full of physical employee documents going back years. There's no systematic destruction process.
+
+[00:11:20] Priya Nair: Those are all very valid concerns and exactly the kind of things the PIA will document and make recommendations on. Last question for today — can you tell us about the insurance process? I understand HR handles that.
+
+[00:11:35] Meena Sharma: Yes, HR Ops manages employee insurance. We offer four types — individual mediclaim, family insurance which is a parental add-on, accidental insurance, and term life insurance. The insurance provider is [REDACTED]. Employee details and health information are shared with the insurance company for enrollment and claims processing.
+
+[00:11:58] Priya Nair: What health information specifically?
+
+[00:12:02] Meena Sharma: Date of birth, pre-existing conditions if any, family member details for the family plan, and of course any claims documentation which could include hospital records, diagnostic reports, bills.
+
+[00:12:18] Priya Nair: And this data goes to the insurance provider how?
+
+[00:12:22] Meena Sharma: Primarily through a portal that the insurance company provides. But for bulk enrollments during the policy renewal period, we share Excel sheets with employee details. Those go via email to the insurance company's relationship manager.
+
+[00:12:40] Priya Nair: Excel sheets with health data going over email. That's definitely something we'll flag.
+
+[00:12:46] Meena Sharma: I'm not surprised. Like I said, we know we have gaps.
+
+[00:12:52] Priya Nair: That's exactly why we're here. Meena, thank you so much for this session. It's been very informative. We'll schedule follow-up deep dives with Aditya, Sunita, and whoever handles training. Rohan has been capturing notes and we'll share a summary for your review within 48 hours.
+
+[00:13:10] Meena Sharma: Sounds good. Just loop in my EA Preeti for scheduling. She manages my calendar.
+
+[00:13:16] Priya Nair: Will do. Thank you.
+
+--- TRANSCRIPT ENDS ---
+
+Session Duration: 1 hour 13 minutes
+Files Referenced: Employee referral tracker (OneDrive), KYC document templates, Offer letter template (HRIS)
+Follow-up Actions:
+  - Schedule deep dive with Aditya (TA) — Recruitment focus
+  - Schedule deep dive with Sunita (HR Ops) — Payroll, BGV, Insurance, Data handling
+  - Schedule session on Training & Development
+  - Request copy of employee data collection form
+  - Request access to view HRIS data fields

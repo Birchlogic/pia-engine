@@ -13,29 +13,9 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "verticalId is required" }, { status: 400 });
     }
 
-    const dfdGraph = await prisma.dFDGraph.findFirst({
-        where: { verticalId, dfdType: "vertical" },
-        orderBy: { createdAt: "desc" },
+    const dfd = await prisma.dfdGraph.findUnique({
+        where: { verticalId },
     });
 
-    if (!dfdGraph || !dfdGraph.graphData) {
-        return NextResponse.json({ graph: null });
-    }
-
-    const graphData = dfdGraph.graphData as Record<string, unknown>;
-
-    return NextResponse.json({
-        graph: {
-            id: dfdGraph.id,
-            status: dfdGraph.status,
-            createdAt: dfdGraph.createdAt,
-            mermaidCode: graphData.mermaidCode || null,
-            summary: graphData.summary || null,
-            nodeCount: graphData.nodeCount || 0,
-            edgeCount: graphData.edgeCount || 0,
-            highRiskFlows: graphData.highRiskFlows || [],
-            crossBorderFlows: graphData.crossBorderFlows || [],
-            unencryptedFlows: graphData.unencryptedFlows || [],
-        },
-    });
+    return NextResponse.json({ mermaidCode: dfd?.mermaidCode || null });
 }

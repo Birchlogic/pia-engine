@@ -69,64 +69,6 @@ enum TranscriptionStatus {
   failed
 }
 
-enum DataCategory {
-  personal
-  sensitive_personal
-  non_personal
-  anonymized
-  pseudonymized
-}
-
-enum EncryptionStatus {
-  yes
-  no
-  partial
-  unknown
-}
-
-enum MatrixRowStatus {
-  draft
-  under_review
-  approved
-}
-
-enum MatrixStatus {
-  draft
-  under_review
-  approved
-}
-
-enum DFDType {
-  vertical
-  master
-}
-
-enum DFDStatus {
-  draft
-  approved
-}
-
-enum DFDNodeType {
-  data_source
-  processing_activity
-  data_store
-  external_entity
-  system_application
-  vertical_owner
-}
-
-enum RiskLevel {
-  low
-  medium
-  high
-  critical
-}
-
-enum GeneratedBy {
-  ai
-  manual
-}
-
 // ─── Models ──────────────────────────────────────────────────
 
 model User {
@@ -140,15 +82,12 @@ model User {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  organization         Organization?    @relation(fields: [orgId], references: [id])
-  createdOrganizations Organization[]   @relation("OrgCreatedBy")
-  createdProjects      Project[]        @relation("ProjectCreatedBy")
-  createdVerticals     Vertical[]       @relation("VerticalCreatedBy")
+  organization         Organization?      @relation(fields: [orgId], references: [id])
+  createdOrganizations Organization[]     @relation("OrgCreatedBy")
+  createdProjects      Project[]          @relation("ProjectCreatedBy")
+  createdVerticals     Vertical[]         @relation("VerticalCreatedBy")
   createdSessions      InterviewSession[] @relation("SessionCreatedBy")
-  uploadedFiles        SessionFile[]     @relation("FileUploadedBy")
-  reviewedMatrixRows   DataMatrixRow[]   @relation("MatrixRowReviewedBy")
-  approvedMatrices     DataMatrix[]      @relation("MatrixApprovedBy")
-  approvedDFDs         DFDGraph[]        @relation("DFDApprovedBy")
+  uploadedFiles        SessionFile[]      @relation("FileUploadedBy")
 
   @@map("users")
 }
@@ -189,7 +128,6 @@ model Project {
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   creator      User         @relation("ProjectCreatedBy", fields: [createdById], references: [id])
   verticals    Vertical[]
-  dfdGraphs    DFDGraph[]
 
   @@map("projects")
 }
@@ -209,12 +147,12 @@ model Vertical {
   createdById      String           @map("created_by")
 
   // Relations
-  project    Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  creator    User               @relation("VerticalCreatedBy", fields: [createdById], references: [id])
-  sessions   InterviewSession[]
-  matrixRows DataMatrixRow[]
-  dataMatrix DataMatrix?
-  dfdGraphs  DFDGraph[]
+  project        Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  creator        User               @relation("VerticalCreatedBy", fields: [createdById], references: [id])
+  sessions       InterviewSession[]
+  dataMatrix     DataMatrix?
+  dataMappingRows DataMappingRow[]
+  dfdGraph       DfdGraph?
 
   @@map("verticals")
 }
@@ -269,129 +207,51 @@ model SessionFile {
   @@map("session_files")
 }
 
-model DataMatrixRow {
-  id                      String          @id @default(uuid())
-  verticalId              String          @map("vertical_id")
-  dataElementName         String          @map("data_element_name")
-  dataCategory            DataCategory    @map("data_category")
-  dataSubCategory         String?         @map("data_sub_category")
-  dataSubjects            String[]        @map("data_subjects")
-  sourceOfData            String?         @map("source_of_data")
-  collectionMethod        String?         @map("collection_method")
-  purposeOfProcessing     String?         @map("purpose_of_processing")
-  legalBasis              String?         @map("legal_basis")
-  consentMechanism        Json?           @map("consent_mechanism")
-  processingTypes         String[]        @map("processing_types")
-  systemsApplications     String[]        @map("systems_applications")
-  storageLocation         String?         @map("storage_location")
-  storageFormat           String?         @map("storage_format")
-  encryptionAtRest        EncryptionStatus @default(unknown) @map("encryption_at_rest")
-  encryptionInTransit     EncryptionStatus @default(unknown) @map("encryption_in_transit")
-  retentionPeriod         String?         @map("retention_period")
-  retentionCompliant      Boolean?        @map("retention_compliant")
-  deletionMethod          String?         @map("deletion_method")
-  accessRoles             Json?           @map("access_roles")
-  dataRecipientsInternal  String[]        @map("data_recipients_internal")
-  dataRecipientsExternal  String[]        @map("data_recipients_external")
-  thirdPartyDetails       Json?           @map("third_party_details")
-  crossBorderTransfer     Boolean         @default(false) @map("cross_border_transfer")
-  crossBorderDetails      Json?           @map("cross_border_details")
-  dataOwner               String?         @map("data_owner")
-  riskScore               Int             @default(1) @map("risk_score")
-  confidenceScore         Float           @default(0) @map("confidence_score")
-  gapsFlagged             String[]        @map("gaps_flagged")
-  sourceSessionIds        String[]        @map("source_session_ids")
-  status                  MatrixRowStatus @default(draft)
-  reviewedById            String?         @map("reviewed_by")
-  reviewedAt              DateTime?       @map("reviewed_at")
-  generatedBy             GeneratedBy     @default(ai) @map("generated_by")
-  createdAt               DateTime        @default(now()) @map("created_at")
-  updatedAt               DateTime        @updatedAt @map("updated_at")
-
-  // Relations
-  vertical   Vertical @relation(fields: [verticalId], references: [id], onDelete: Cascade)
-  reviewer   User?    @relation("MatrixRowReviewedBy", fields: [reviewedById], references: [id])
-
-  @@map("data_matrix_rows")
-}
+// ─── Data Matrix & DFD ──────────────────────────────────────
 
 model DataMatrix {
-  id                 String       @id @default(uuid())
-  verticalId         String       @unique @map("vertical_id")
-  status             MatrixStatus @default(draft)
-  approvedById       String?      @map("approved_by")
-  approvedAt         DateTime?    @map("approved_at")
-  generationMetadata Json?        @map("generation_metadata")
-  createdAt          DateTime     @default(now()) @map("created_at")
-  updatedAt          DateTime     @updatedAt @map("updated_at")
+  id             String   @id @default(uuid())
+  verticalId     String   @unique @map("vertical_id")
+  schemaOneJson  Json     @map("schema_one_json")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   // Relations
-  vertical   Vertical @relation(fields: [verticalId], references: [id], onDelete: Cascade)
-  approvedBy User?    @relation("MatrixApprovedBy", fields: [approvedById], references: [id])
+  vertical Vertical @relation(fields: [verticalId], references: [id], onDelete: Cascade)
 
   @@map("data_matrices")
 }
 
-model DFDGraph {
-  id                   String    @id @default(uuid())
-  projectId            String    @map("project_id")
-  verticalId           String?   @map("vertical_id")
-  dfdType              DFDType   @map("dfd_type")
-  graphData            Json?     @map("graph_data")
-  layoutConfig         Json?     @map("layout_config")
-  status               DFDStatus @default(draft)
-  approvedById         String?   @map("approved_by")
-  approvedAt           DateTime? @map("approved_at")
-  generatedFromMatrixIds String[] @map("generated_from_matrix_ids")
-  createdAt            DateTime  @default(now()) @map("created_at")
-  updatedAt            DateTime  @updatedAt @map("updated_at")
+model DataMappingRow {
+  id                 String   @id @default(uuid())
+  verticalId         String   @map("vertical_id")
+  sNo                Int      @map("s_no")
+  dataCategory       String   @map("data_category")
+  description        String
+  purpose            String
+  dataOwner          String   @map("data_owner")
+  storageLocation    String   @map("storage_location")
+  dataClassification String   @map("data_classification")
+  retentionPeriod    String   @map("retention_period")
+  legalBasis         String   @map("legal_basis")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
   // Relations
-  project    Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  vertical   Vertical? @relation(fields: [verticalId], references: [id])
-  approvedBy User?     @relation("DFDApprovedBy", fields: [approvedById], references: [id])
-  nodes      DFDNode[]
-  edges      DFDEdge[]
+  vertical Vertical @relation(fields: [verticalId], references: [id], onDelete: Cascade)
+
+  @@map("data_mapping_rows")
+}
+
+model DfdGraph {
+  id          String   @id @default(uuid())
+  verticalId  String   @unique @map("vertical_id")
+  mermaidCode String   @map("mermaid_code")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  vertical Vertical @relation(fields: [verticalId], references: [id], onDelete: Cascade)
 
   @@map("dfd_graphs")
-}
-
-model DFDNode {
-  id         String      @id @default(uuid())
-  dfdGraphId String      @map("dfd_graph_id")
-  nodeType   DFDNodeType @map("node_type")
-  label      String
-  metadata   Json?
-  positionX  Float       @map("position_x")
-  positionY  Float       @map("position_y")
-  riskLevel  RiskLevel?  @map("risk_level")
-  verticalId String?     @map("vertical_id")
-
-  // Relations
-  dfdGraph    DFDGraph  @relation(fields: [dfdGraphId], references: [id], onDelete: Cascade)
-  sourceEdges DFDEdge[] @relation("EdgeSource")
-  targetEdges DFDEdge[] @relation("EdgeTarget")
-
-  @@map("dfd_nodes")
-}
-
-model DFDEdge {
-  id                 String    @id @default(uuid())
-  dfdGraphId         String    @map("dfd_graph_id")
-  sourceNodeId       String    @map("source_node_id")
-  targetNodeId       String    @map("target_node_id")
-  dataElements       String[]  @map("data_elements")
-  dataClassification String?   @map("data_classification")
-  processingType     String?   @map("processing_type")
-  isEncrypted        Boolean   @default(false) @map("is_encrypted")
-  isCrossBorder      Boolean   @default(false) @map("is_cross_border")
-  riskLevel          RiskLevel @default(low) @map("risk_level")
-  metadata           Json?
-
-  // Relations
-  dfdGraph   DFDGraph @relation(fields: [dfdGraphId], references: [id], onDelete: Cascade)
-  sourceNode DFDNode  @relation("EdgeSource", fields: [sourceNodeId], references: [id], onDelete: Cascade)
-  targetNode DFDNode  @relation("EdgeTarget", fields: [targetNodeId], references: [id], onDelete: Cascade)
-
-  @@map("dfd_edges")
 }

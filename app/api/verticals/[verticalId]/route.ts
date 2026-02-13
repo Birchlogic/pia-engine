@@ -25,7 +25,7 @@ export async function GET(
                 },
             },
             dataMatrix: true,
-            _count: { select: { sessions: true, matrixRows: true } },
+            _count: { select: { sessions: true, dataMappingRows: true } },
         },
     });
 

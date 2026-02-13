@@ -1,0 +1,168 @@
+INTERVIEW TRANSCRIPT
+Project: DPDPA Compliance Assessment 2026
+Department: Human Resources — HR Operations
+Session: 3 of 5 — HR Ops Deep Dive (Payroll, BGV, Insurance, Data Storage)
+Date: Thursday, 16 January 2026
+Time: 10:30 AM – 12:15 PM IST
+Location: Client HQ, HR Department, Sunita's Office (In-Person)
+Interviewer: Rohan Desai (Privacy Analyst, Birchlogic)
+Interviewee: Sunita Menon (Head – HR Operations)
+Note-taker: Priya Nair (Senior Privacy Analyst, Birchlogic)
+Recording: Audio recorded with consent (File: HR_S3_audio_16Jan.m4a)
+Assessment Criteria: Data Storage, Data Sharing (External), Retention & Deletion, Access Controls, Security Measures
+
+--- TRANSCRIPT BEGINS ---
+
+[00:00:05] Rohan Desai: Good morning Sunita. Thanks for making time. We've had very productive sessions with Meena and Aditya already, and they both pointed to your team as the hub where a lot of the data processing actually happens. So we're keen to understand how your operations work from a data handling perspective.
+
+[00:00:22] Sunita Menon: Morning Rohan, Priya. Yes, we're basically the engine room. Everything flows through Ops at some point.
+
+[00:00:30] Rohan Desai: Let's start with the systems. What's the primary system your team works in?
+
+[00:00:35] Sunita Menon: Our HRIS is the core system. That's where employee master data lives — personal details, employment history, salary structure, leave balances, everything. All six people on my team have access to the HRIS. We also use Excel heavily — for MIS reporting, salary calculations, insurance reconciliations. Email is our communication backbone. And OneDrive for shared folders within the team.
+
+[00:01:05] Rohan Desai: What HRIS product are you using?
+
+[00:01:08] Sunita Menon: It's called greytHR. Cloud-based. We've been on it for about two years now. Before that everything was in Excel. The migration was painful but it's better now.
+
+[00:01:21] Rohan Desai: greytHR — is it hosted in India?
+
+[00:01:24] Sunita Menon: I believe so. Their servers are in India as far as I know. But I'm not 100% certain. IT would know better.
+
+[00:01:33] Rohan Desai: We'll check with IT. Let's walk through the employee data lifecycle starting from when you receive documents from the TA team.
+
+[00:01:42] Sunita Menon: Right. So Aditya or Abc send us an email with all the candidate's documents and details once someone is selected. My team reviews the documents, checks everything is in order — all documents received, photos are clear, forms are filled correctly. Then we initiate the CIBIL check.
+
+[00:02:02] Rohan Desai: Walk me through the CIBIL check process in detail.
+
+[00:02:06] Sunita Menon: We use a third-party vendor for CIBIL checks. I'd rather not name them on record, but it's a well-known credit bureau service provider. We send them the candidate's PAN number, full name, and date of birth via a portal they provide. Sometimes for bulk checks — like when we're hiring 20 LOs at once — we upload a batch file. The portal returns the credit score and report within a few hours. If the score is below 650, it's an automatic rejection unless there's a specific exception approved by the CHRO.
+
+[00:02:42] Rohan Desai: The batch file — what format and what fields?
+
+[00:02:46] Sunita Menon: Excel. It has candidate name, PAN number, date of birth, father's name, and mobile number. We upload it to the vendor's portal, they process it, and we can download the reports individually from the portal.
+
+[00:03:00] Rohan Desai: Is the portal access restricted?
+
+[00:03:03] Sunita Menon: Yes, only I and one other person on my team have login credentials. It's password-protected.
+
+[00:03:10] Rohan Desai: Is there MFA?
+
+[00:03:12] Sunita Menon: No, just username and password.
+
+[00:03:15] Rohan Desai: Noted. And the CIBIL reports that come back — where are those stored?
+
+[00:03:20] Sunita Menon: We download the PDF reports and save them in the candidate's folder on OneDrive. And we also keep a tracker spreadsheet that logs which candidates were checked, their scores, and the status — approved or rejected.
+
+[00:03:36] Rohan Desai: Let me shift to payroll. How does the salary data flow?
+
+[00:03:40] Sunita Menon: Once a candidate joins, we set them up in greytHR with their full CTC breakup. Payroll runs monthly. My team prepares the payroll input — any variable pay, deductions, new joiners, exits — in an Excel sheet. That sheet is uploaded to greytHR for processing. greytHR calculates the net pay and generates bank transfer files. We share those files with the Finance team who executes the actual bank transfer.
+
+[00:04:12] Rohan Desai: The payroll input Excel — what data does it contain?
+
+[00:04:16] Sunita Menon: Employee ID, name, bank account number, IFSC code, basic salary, HRA, special allowance, PF contribution — employer and employee, ESI if applicable, professional tax, TDS, any loan deductions, any performance incentives for the month. It's very detailed.
+
+[00:04:38] Rohan Desai: And this Excel with bank account numbers and salary details — how is it shared with Finance?
+
+[00:04:44] Sunita Menon: Email.
+
+[00:04:46] Rohan Desai: Is the file encrypted or password-protected?
+
+[00:04:49] Sunita Menon: No. [pause] I know what you're going to say.
+
+[00:04:53] Rohan Desai: [laughs] I think you do. Let's talk about Background Verification. Meena mentioned it happens post-joining.
+
+[00:04:59] Sunita Menon: That's right. BGV is done after the employee has already joined. We use external BGV vendors — we work with two agencies. We share the employee's documents with them — education certificates, previous employment details, address proof, identity documents. They verify the authenticity and send back a report.
+
+[00:05:22] Rohan Desai: How are documents shared with the BGV vendor?
+
+[00:05:25] Sunita Menon: Email. We compile a package for each employee — scanned copies of all documents — and email it to our point of contact at the BGV agency. They email back the report in about 7 to 10 days.
+
+[00:05:38] Rohan Desai: And the reports, where do those end up?
+
+[00:05:41] Sunita Menon: Saved in the employee's folder on OneDrive and a physical copy goes into their personnel file. We also update the HRIS to mark BGV as completed, pending, or flagged.
+
+[00:05:54] Rohan Desai: Do you have a data processing agreement with the BGV vendors?
+
+[00:05:58] Sunita Menon: We have a service agreement. Whether it specifically covers data protection, I'm not sure. I can send you a copy if that helps.
+
+[00:06:07] Rohan Desai: That would be very helpful, yes. Now insurance — walk me through how that works.
+
+[00:06:13] Sunita Menon: We offer four policies: individual mediclaim, family insurance which is a parental add-on that employees can opt for, accidental death and disability, and term life insurance. Our broker is [REDACTED] and the underwriter is [REDACTED]. During annual renewal, we share the full employee census with the insurance company — that includes name, date of birth, gender, date of joining, salary band, and for family policies, the family member details — spouse name, DOB, children's names and DOBs, parents' names, DOBs, and any pre-existing medical conditions.
+
+[00:06:55] Rohan Desai: Pre-existing conditions — that's health data. How is it collected?
+
+[00:06:59] Sunita Menon: Employees fill out a health declaration form during onboarding. It asks about pre-existing conditions, major surgeries, chronic illnesses, current medications. This is a paper form that gets scanned and stored in the employee's file.
+
+[00:07:17] Rohan Desai: So you're collecting health data on a paper form, scanning it, and then sharing health information with the insurance company. Is there a specific consent for health data sharing?
+
+[00:07:28] Sunita Menon: The health declaration form has a statement at the bottom that says something like "I authorize the company to share this information with the insurance provider." But it's very generic. I don't think it would meet DPDPA standards for explicit consent for sensitive personal data.
+
+[00:07:45] Rohan Desai: Likely not, but we'll assess that. How is the employee census shared with the insurer?
+
+[00:07:51] Sunita Menon: Excel file. Emailed to the insurance broker.
+
+[00:07:55] Rohan Desai: So to summarize, a file containing names, DOBs, salary bands, family details, and health conditions is sent as an unencrypted Excel attachment over email?
+
+[00:08:05] Sunita Menon: Yes. I realize that sounds bad.
+
+[00:08:08] Rohan Desai: It's not uncommon. But it's exactly the kind of thing this assessment is designed to surface. Let's move to retention. Do you have defined retention periods for any HR data?
+
+[00:08:19] Sunita Menon: For salary and statutory records — PF, ESI, TDS — we keep them as required by law. I think the PF Act requires 5 years after the employee leaves, or something like that. For other data, we don't really have a formal policy. Employee records stay in the HRIS and on OneDrive indefinitely. We've never done a data cleanup exercise.
+
+[00:08:42] Rohan Desai: What about rejected candidates? Their data?
+
+[00:08:46] Sunita Menon: If it reaches us — meaning TA sent us documents and then the candidate was rejected at CIBIL stage — I think those documents stay in our email and OneDrive too. We don't have a process to delete rejected candidate data.
+
+[00:08:59] Rohan Desai: Physical files?
+
+[00:09:02] Sunita Menon: We have a storeroom with employee personnel files going back at least eight or nine years. There's no destruction schedule. When an employee leaves, their file stays in the active cabinet for a while and then eventually gets moved to the storeroom. But nothing gets shredded or destroyed.
+
+[00:09:21] Rohan Desai: Access controls — within your team, does everyone have the same level of access to the HRIS?
+
+[00:09:27] Sunita Menon: More or less, yes. All six team members can view and edit employee records. I have admin access which lets me do things like delete records and generate reports. But there's no role-based restriction — a junior executive on my team can see the same data as me.
+
+[00:09:46] Rohan Desai: What about payroll data specifically? Can everyone see salary details?
+
+[00:09:50] Sunita Menon: In the HRIS, salary data is visible to all my team members. Ideally only the payroll processing team — which is two people — should have access. But greytHR's access controls aren't that granular. Or maybe they are and we haven't configured them properly. I'd need to check.
+
+[00:10:08] Rohan Desai: That would be worth looking into. Last area — what data does your team share with other departments?
+
+[00:10:15] Sunita Menon: Finance gets payroll data monthly. Admin gets new joiner details for ID cards — name, photo, employee ID, designation, blood group. IT gets new joiner details for account creation — name, email, department, manager. We also share headcount and attrition data with leadership monthly for business reviews, but that's aggregated, no personal data.
+
+[00:10:42] Rohan Desai: The data shared with IT for account setup — how is that communicated?
+
+[00:10:47] Sunita Menon: Email. We send them a request with the employee's name, joining date, department, reporting manager, and what systems they need access to.
+
+[00:10:58] Rohan Desai: And when someone exits, do you inform IT to deactivate access?
+
+[00:11:03] Sunita Menon: Yes, we send an email to IT on the last working day with the employee's name and ID and ask them to deactivate accounts. Though sometimes there's a delay. I've seen cases where ex-employee email accounts were active for a week or two after they left.
+
+[00:11:19] Rohan Desai: That's a security concern. We'll note it. Sunita, you've been incredibly thorough and forthcoming. This is exactly the level of detail we need. Let me ask you one final question — what would you change if you could? What worries you most about how data is handled in HR Ops?
+
+[00:11:38] Sunita Menon: Three things. First, everything is email. Every document, every sensitive file, every payroll sheet — it all moves by email. If we could move to a secure document exchange system, that would be a huge improvement. Second, the physical files. We have rooms full of paper with sensitive data and no plan to digitize or destroy old files. Third, the HRIS access — I know it's too open. Everyone on my team can see everything. We need proper role-based access. I've asked for it but it keeps getting deprioritized.
+
+[00:12:12] Rohan Desai: All three of those will feature prominently in our recommendations. Thank you, Sunita.
+
+--- TRANSCRIPT ENDS ---
+
+Session Duration: 1 hour 45 minutes
+Systems Mentioned: greytHR (HRIS, cloud-based), OneDrive, Email (Outlook), CIBIL vendor portal, Excel
+Third Parties: CIBIL check vendor (unnamed), 2 BGV agencies (unnamed), Insurance broker and underwriter (unnamed)
+Data Elements Identified: Employee master data, bank account/IFSC, full CTC breakup, PF/ESI/TDS records, CIBIL scores/reports, education certificates, employment verification docs, insurance census (name, DOB, gender, salary, family details), health declaration (pre-existing conditions, medications, surgeries), BGV reports
+Key Gaps Flagged:
+  - Payroll Excel with bank accounts sent unencrypted via email
+  - Insurance census with health data sent unencrypted via email
+  - No formal data retention policy (data kept indefinitely)
+  - Physical employee files with no destruction schedule (8-9 years of accumulation)
+  - CIBIL vendor portal has no MFA
+  - HRIS access not role-restricted (all 6 team members have full visibility)
+  - BGV service agreement may lack data protection clauses
+  - Delayed IT account deactivation for exited employees
+  - Health declaration consent language likely insufficient for DPDPA
+  - Rejected candidate data never deleted
+Follow-up Required:
+  - Obtain copy of BGV vendor service agreement
+  - Obtain copy of health declaration form
+  - Confirm greytHR hosting location with IT
+  - Check greytHR RBAC capabilities
+  - Verify statutory retention periods (PF Act, IT Act)

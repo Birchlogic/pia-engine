@@ -83,12 +83,27 @@ function extractJSON(raw: string): string {
     const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
     if (fenceMatch) return fenceMatch[1].trim();
 
-    // Try to find JSON object/array boundaries
-    const start = raw.indexOf("{");
-    const end = raw.lastIndexOf("}");
-    if (start !== -1 && end !== -1 && end > start) {
-        return raw.slice(start, end + 1);
+    // Try to find JSON object boundaries
+    const objStart = raw.indexOf("{");
+    const objEnd = raw.lastIndexOf("}");
+
+    // Try to find JSON array boundaries
+    const arrStart = raw.indexOf("[");
+    const arrEnd = raw.lastIndexOf("]");
+
+    // Pick whichever comes first (object or array)
+    const hasObj = objStart !== -1 && objEnd !== -1 && objEnd > objStart;
+    const hasArr = arrStart !== -1 && arrEnd !== -1 && arrEnd > arrStart;
+
+    if (hasObj && hasArr) {
+        // Use whichever starts first
+        if (arrStart < objStart) {
+            return raw.slice(arrStart, arrEnd + 1);
+        }
+        return raw.slice(objStart, objEnd + 1);
     }
+    if (hasObj) return raw.slice(objStart, objEnd + 1);
+    if (hasArr) return raw.slice(arrStart, arrEnd + 1);
 
     return raw.trim();
 }
@@ -218,7 +233,7 @@ export async function llmCall<T extends z.ZodTypeAny>(
     const temperature = options.temperature ?? 0.1;
 
     const defaultModel =
-        provider === "anthropic" ? "claude-sonnet-4-20250514" : "gpt-4o";
+        provider === "anthropic" ? "claude-3-5-sonnet-20240620" : "gpt-4o";
     const model = options.model ?? defaultModel;
 
     let lastError: Error | null = null;

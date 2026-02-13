@@ -1,0 +1,106 @@
+INTERVIEW TRANSCRIPT
+Project: DPDPA Compliance Assessment 2026
+Department: Human Resources — Training & Development / Employee Exit
+Session: 4 of 5 — Training Programs & Employee Exit Process
+Date: Monday, 20 January 2026
+Time: 11:00 AM – 12:00 PM IST
+Location: Virtual (MS Teams Call)
+Interviewer: Priya Nair (Senior Privacy Analyst, Birchlogic)
+Interviewees: Meena Sharma (VP – Human Resources), Ravi Kapoor (Training Coordinator)
+Note-taker: Rohan Desai (Privacy Analyst, Birchlogic)
+Recording: MS Teams recording (File: HR_S4_recording_20Jan.mp4)
+Assessment Criteria: Data Collection Practices, Third-Party Sharing, Retention & Deletion, Data Subject Rights
+
+--- TRANSCRIPT BEGINS ---
+
+[00:00:10] Priya Nair: Good morning everyone. Thanks for getting on the call. Today we want to cover two areas we haven't gone deep on yet — Training and Development, and the Employee Exit process. Meena, I know you mentioned training is under your direct purview. And Ravi, I understand you coordinate the day-to-day execution?
+
+[00:00:28] Ravi Kapoor: That's right. I handle the logistics — scheduling, materials, tracking attendance, coordinating with external trainers. Meena sets the strategy and approves the training calendar.
+
+[00:00:40] Priya Nair: Let's start with the induction program. Meena, you mentioned something called Parichay?
+
+[00:00:45] Meena Sharma: Parichay is our new joiner induction program. Every employee who joins goes through it within their first week. It covers company overview, values, policies, department introductions, compliance training, basic IT security awareness — it's a two-day program for HQ employees and a condensed one-day version for field staff.
+
+[00:01:08] Priya Nair: Is attendance tracked?
+
+[00:01:10] Ravi Kapoor: Yes. We maintain an attendance register — physical for in-person sessions, and for virtual sessions we take screenshots of participants from the Teams call. The attendance data is entered into an Excel sheet. We track employee name, employee ID, date, session name, and whether they completed the full program or partially attended.
+
+[00:01:33] Priya Nair: Where is that Excel stored?
+
+[00:01:36] Ravi Kapoor: My OneDrive folder. I also email a copy to Meena monthly.
+
+[00:01:42] Priya Nair: Are there any assessments or tests at the end of the induction?
+
+[00:01:46] Ravi Kapoor: Not currently. We've talked about adding a quiz but haven't implemented it. Right now it's just attendance-based completion.
+
+[00:01:55] Priya Nair: What about ongoing training? You mentioned external training for call centre staff.
+
+[00:02:01] Meena Sharma: Yes. We provide product training and regulatory training to staff working in our call centres. The training material is developed internally but sometimes we bring in external consultants for specialized topics — anti-money laundering, fair lending practices, that sort of thing.
+
+[00:02:20] Priya Nair: How is external training delivered?
+
+[00:02:23] Ravi Kapoor: It depends. Sometimes the trainer comes on-site. Sometimes it's virtual. For call centre staff specifically, we share the training material with them — usually PDFs or PowerPoint presentations — via email. They go through it on their own. Then they have to send a confirmation email saying they've completed the training. That email is our record of completion.
+
+[00:02:48] Priya Nair: So the training completion record is an email in someone's inbox?
+
+[00:02:52] Ravi Kapoor: Yes. And I compile it into the training tracker Excel periodically. But the emails are the primary evidence.
+
+[00:03:02] Priya Nair: What data about training is shared with external parties?
+
+[00:03:07] Meena Sharma: Minimal. If we use an external trainer, we share the attendee list — names and employee IDs — so they know who's in the session. For regulatory training that requires certification, we share names and employee IDs with the certifying body.
+
+[00:03:24] Priya Nair: Is there a consent or privacy notice given to employees regarding their training data being shared with external trainers?
+
+[00:03:30] Meena Sharma: No, not specifically. I suppose it could be covered under the employment contract, but I'm not sure the contract has specific language about training data.
+
+[00:03:42] Priya Nair: We'll review the employment contract as part of this assessment. Let's shift to employee exit. Mr. Abc handles retention, I believe?
+
+[00:03:51] Meena Sharma: Mr. Abc handles the retention conversation when someone resigns, yes. But the exit process itself — resignation acceptance, notice period, full and final settlement, relieving letter — that's HR Ops. I'll give you the high level and you can deep dive with Sunita if needed.
+
+[00:04:10] Priya Nair: That works. Walk me through the typical exit flow.
+
+[00:04:14] Meena Sharma: Employee submits resignation — usually by email to their manager and HR. The manager can accept or initiate a retention discussion. If the resignation is accepted, the employee serves notice period — typically 30 to 90 days depending on the role and grade. During the notice period, Sunita's team initiates the full and final settlement process — recovery of any outstanding loans, return of company assets (laptop, ID card, phone), deactivation of system access, and calculation of final dues — unpaid salary, leave encashment, bonus if any, gratuity if applicable.
+
+[00:04:52] Priya Nair: What about the exit interview? Is one conducted?
+
+[00:04:56] Meena Sharma: We do exit interviews, yes. I try to do them personally for senior employees. For others, either the HRBP or Ravi handles it. It's usually a 30-minute conversation — why they're leaving, what could have been better, feedback on the company. The feedback is documented in an Excel sheet.
+
+[00:05:16] Priya Nair: What happens to the exited employee's data in the HRIS?
+
+[00:05:20] Meena Sharma: Their status is marked as "separated" but all their data stays in the system. We don't delete anything. The HRIS retains their full record — personal details, salary history, leave records, all of it.
+
+[00:05:35] Priya Nair: Indefinitely?
+
+[00:05:37] Meena Sharma: Indefinitely. We've been live on greytHR for two years and everyone who's ever been on the system is still there. Before greytHR, all the historical data is in Excel files going back much further.
+
+[00:05:51] Priya Nair: What about the physical file of an exited employee?
+
+[00:05:55] Meena Sharma: It stays. Goes from the active cabinet to the storeroom, but nothing is destroyed. Sunita mentioned this in your session with her, I believe.
+
+[00:06:05] Priya Nair: She did, yes. One more question on exit — do employees have the ability to request deletion of their data after leaving? Has anyone ever asked?
+
+[00:06:14] Meena Sharma: Nobody has ever asked. And honestly, I wouldn't know what to do if they did. We'd have to keep some records — statutory ones like PF and tax filings. But the rest? I suppose there's no legal requirement to keep a former employee's Aadhaar copy or family details forever.
+
+[00:06:33] Priya Nair: That's a good insight. Under DPDPA, data principals — which includes former employees — have the right to request erasure of their personal data, subject to certain exceptions for legal obligations. Defining what you must keep versus what you can delete will be an important part of the recommendations.
+
+[00:06:52] Priya Nair: Meena, Ravi — thank you both. This completes our coverage of Training and Exit. The last session will be a data mapping walkthrough with Sunita's team to verify everything we've captured. I think we're in very good shape.
+
+[00:07:08] Meena Sharma: Great. Happy to hear it. Let us know if you need anything else.
+
+--- TRANSCRIPT ENDS ---
+
+Session Duration: 58 minutes
+Systems Mentioned: MS Teams, OneDrive, Email, greytHR, Excel
+Third Parties: External training consultants, certification bodies (unnamed)
+Data Elements Identified: Training attendance (name, ID, date, session, completion status), exit interview feedback, full and final settlement details, resignation records, exit clearance (asset returns, access deactivation), leave encashment, gratuity calculations
+Key Gaps Flagged:
+  - Training completion records are emails in individual inboxes (no centralized system)
+  - No consent/notice for sharing employee data with external trainers
+  - Exited employee data retained indefinitely in HRIS (no retention policy)
+  - No process to handle data erasure requests from former employees
+  - Physical files of exited employees stored with no destruction schedule
+  - Employment contract may lack specific data processing provisions
+Follow-up Required:
+  - Review standard employment contract for data processing clauses
+  - Verify statutory retention requirements for post-exit employee data
+  - Check if greytHR has data archival/deletion capabilities

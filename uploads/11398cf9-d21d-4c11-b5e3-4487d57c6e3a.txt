@@ -1,0 +1,142 @@
+INTERVIEW TRANSCRIPT
+Project: DPDPA Compliance Assessment 2026
+Department: Human Resources — Talent Acquisition
+Session: 2 of 5 — Recruitment & Onboarding Deep Dive
+Date: Wednesday, 15 January 2026
+Time: 2:00 PM – 3:30 PM IST
+Location: Client HQ, Meeting Room 5A (In-Person)
+Interviewer: Priya Nair (Senior Privacy Analyst, Birchlogic)
+Interviewee: Aditya Kulkarni (Lead – Talent Acquisition, HQ & Senior Hiring)
+Note-taker: Rohan Desai (Privacy Analyst, Birchlogic)
+Recording: Audio recorded with consent (File: HR_S2_audio_15Jan.m4a)
+Assessment Criteria: Data Collection Practices, Third-Party Sharing, Consent Mechanisms, Access Controls
+
+--- TRANSCRIPT BEGINS ---
+
+[00:00:08] Priya Nair: Hi Aditya, thanks for joining us. Meena gave us a good overview on Monday. Today we want to go deeper into the recruitment process specifically — the data you collect, the systems you use, how information moves, and who has access to what.
+
+[00:00:22] Aditya Kulkarni: Sure, happy to. I've been running TA for HQ and senior positions for about three years now so I can walk you through it end to end.
+
+[00:00:31] Priya Nair: Perfect. Let's start with how a requirement reaches you.
+
+[00:00:35] Aditya Kulkarni: So business teams — department heads, VPs, whoever needs to hire — they reach out to me either by email or sometimes just a Teams call or WhatsApp message. There's no formal requisition form or system. It's very informal. They'll say "I need an Area Manager for Maharashtra" or "We need two people in the analytics team." Sometimes they'll email me a job description, sometimes I have to draft one myself based on the conversation.
+
+[00:01:05] Priya Nair: Is there any approval workflow before you start sourcing? Like a manpower requisition approved by finance?
+
+[00:01:12] Aditya Kulkarni: For HQ roles and senior positions, yes, there's supposed to be a manpower plan that's approved during the annual budgeting cycle. But in practice, a lot of hiring happens outside of that plan. Someone leaves unexpectedly, or a new business need comes up, and the business just tells me to start looking. The formal approval usually catches up later.
+
+[00:01:35] Priya Nair: OK. Once you have the requirement, walk me through sourcing.
+
+[00:01:39] Aditya Kulkarni: Three channels primarily. LinkedIn — I have a Recruiter license so I can search and InMail candidates directly. Naukri — we have a corporate account, I post jobs and search the database. And then external consultants. We work with about four or five recruitment agencies. I share the JD with them and they send resumes.
+
+[00:02:02] Priya Nair: How do consultants send you the resumes?
+
+[00:02:05] Aditya Kulkarni: Email. Always email. Sometimes they'll share a batch of five or ten resumes in one go, attached as PDFs or Word docs.
+
+[00:02:14] Priya Nair: And do you have data processing agreements with these consultants? Anything that governs how they handle candidate data?
+
+[00:02:21] Aditya Kulkarni: [pause] I don't think so. We have commercial agreements — rates, payment terms, that sort of thing. But I don't think there's anything specifically about data protection. That's probably a question for legal.
+
+[00:02:37] Rohan Desai: Just to note, Aditya — under DPDPA, when a third party like a recruitment consultant collects personal data of candidates on your behalf, there should be a data processing agreement in place. We'll flag this as a gap.
+
+[00:02:50] Aditya Kulkarni: Makes sense. I didn't realize that was needed.
+
+[00:02:55] Priya Nair: No worries, that's exactly what this exercise is for. What happens once you have resumes?
+
+[00:03:01] Aditya Kulkarni: I review them, shortlist the ones that fit, and forward them to the hiring manager via email. The hiring manager reviews and tells me who to bring in for interviews. I then schedule interviews on MS Teams. First round is with the L1 manager — direct supervisor. If they clear that, second round with the L2 manager. For very senior roles, there might be a third round with the VP or CXO.
+
+[00:03:30] Priya Nair: During the interview process, is any additional data collected from the candidate? Or is it just the resume at this stage?
+
+[00:03:37] Aditya Kulkarni: Just the resume at the interview stage. We don't ask for documents until after selection. Although, during interviews, hiring managers sometimes take their own notes. Those notes could contain personal opinions, assessment scores, that sort of thing. Where those notes end up depends entirely on the manager — could be in their OneNote, a personal notebook, an email to themselves.
+
+[00:04:02] Priya Nair: So there's no centralized record of interview feedback?
+
+[00:04:06] Aditya Kulkarni: Not a formal one, no. Some managers email me their feedback. Some call me. Some just say "yes, move forward" or "no, reject." I keep a tracker in Excel — candidate name, position, interview dates, status, feedback summary — but it's my personal tracker on OneDrive.
+
+[00:04:28] Priya Nair: How many candidates would you say flow through your tracker in a given year?
+
+[00:04:33] Aditya Kulkarni: For my scope — senior and HQ roles — probably around 300 to 400 candidates. Not all get to interview stage obviously. Maybe 150 actually get interviewed. We hire maybe 40 to 50 from those.
+
+[00:04:50] Priya Nair: And what happens to the data of rejected candidates? The 350 or so who don't get hired?
+
+[00:04:56] Aditya Kulkarni: Nothing, honestly. Their resumes stay in my email. The tracker has their details indefinitely. I've never deleted old candidate data. Some of it is three years old.
+
+[00:05:10] Priya Nair: That's a retention issue we'll need to address. Let's move to post-selection. A candidate is selected — what's the document collection process?
+
+[00:05:19] Aditya Kulkarni: I send the candidate an email — I have a standard template — listing out all the documents we need. Aadhaar card copy, PAN card copy, driving license for sales profiles, highest education certificate and marksheets, last three months' salary slips from current employer, latest increment or appraisal letter, two passport-size photographs, and for experienced candidates, the relieving letter from previous employer.
+
+[00:05:50] Priya Nair: Is there a consent form or privacy notice that goes with this request? Something that tells the candidate why you're collecting this data and how it'll be used?
+
+[00:05:59] Aditya Kulkarni: No. The email just lists what we need and asks them to send it. I don't think there's any privacy notice or consent language.
+
+[00:06:08] Rohan Desai: Another gap to flag. Under DPDPA, at the point of collecting personal data, you need to provide a clear notice to the data principal about what data you're collecting, the purpose, and their rights.
+
+[00:06:22] Aditya Kulkarni: Got it. That's something we can definitely add to the email template.
+
+[00:06:27] Priya Nair: Once you receive the documents, what do you do with them?
+
+[00:06:31] Aditya Kulkarni: I forward the entire email with attachments to Sunita's team — HR Ops. They take it from there for CIBIL check and onboarding. I also save copies in my OneDrive folder for the candidate, in case I need to reference them later.
+
+[00:06:48] Priya Nair: So the candidate's Aadhaar, PAN, salary slips — those are now in at least three places? The candidate's sent folder, your inbox plus OneDrive, and the HR Ops team's inbox?
+
+[00:06:59] Aditya Kulkarni: [laughs] When you put it that way, yes. And probably more places than that — if the hiring manager asked for the documents too, which sometimes happens.
+
+[00:07:10] Priya Nair: Right. Let's talk about the CIBIL check. Meena mentioned it happens after document collection. What do you know about that process?
+
+[00:07:18] Aditya Kulkarni: I know it involves checking the candidate's credit score. Sunita's team handles it. I think they use the candidate's PAN and name to pull the report. If the CIBIL score is below a certain threshold, the candidate is rejected. I've had a few cases where candidates were rejected at this stage.
+
+[00:07:38] Priya Nair: And the candidate is informed that a credit check will be run?
+
+[00:07:42] Aditya Kulkarni: I don't explicitly tell them that. The document request email doesn't mention it. They probably figure it out when we ask for PAN, but we don't have explicit consent for the credit check.
+
+[00:07:55] Priya Nair: That's a significant consent gap, especially since credit data is financial personal data under DPDPA. We'll definitely highlight this.
+
+[00:08:05] Priya Nair: After CIBIL clears, what happens?
+
+[00:08:09] Aditya Kulkarni: I collect the remaining information. Family details — spouse, children, parents. Nominee details for PF and insurance. Addresses — current and permanent. Blood group. Emergency contact — name, relationship, phone number. This is done through a form we email to the candidate. They fill it out — it's a Word document — and email it back.
+
+[00:08:37] Priya Nair: Is this form standardized?
+
+[00:08:40] Aditya Kulkarni: Yes, it's a standard template. I can share a copy with you. It's called "Employee Personal Details Form" or something like that.
+
+[00:08:48] Priya Nair: Please do, that would be very helpful. Then salary negotiation?
+
+[00:08:53] Aditya Kulkarni: Yes. I negotiate the CTC with the candidate. Once we agree on a number, I need approval from the VP HR and the CHRO. That approval happens over email — I send the proposed CTC along with the candidate's current salary and the budget for the role. They approve or come back with adjustments. Once approved, I hand everything over to HR Ops for the offer letter.
+
+[00:09:18] Priya Nair: By "everything" you mean...
+
+[00:09:21] Aditya Kulkarni: All documents, the personal details form, approved salary details, proposed joining date, reporting manager, location. I send one consolidated email to Sunita with all of this.
+
+[00:09:35] Priya Nair: And the field-level hiring? Mr. Abc's process — is it the same?
+
+[00:09:40] Aditya Kulkarni: Broadly similar but more volume and more informal. Abc handles LOs and BMs — that's easily 200 to 300 hires a year. He relies heavily on references and consultants. The process steps are the same — source, interview, select, collect documents, CIBIL check, offer — but with less documentation along the way because of the sheer volume. Abc would be the right person to walk you through the specifics of his process.
+
+[00:10:08] Priya Nair: We'll schedule time with him. Aditya, one last question. The data you have access to — candidate resumes, documents, personal details — who else can access your OneDrive folders and email?
+
+[00:10:20] Aditya Kulkarni: My OneDrive is my personal drive. I haven't shared folders with anyone. But the IT team presumably has admin access. My email — same thing, IT admin could access it. And Meena, as my manager, has asked me to forward specific emails on occasion. But there's no shared TA drive or system where all this is centralized.
+
+[00:10:45] Priya Nair: So if you were to leave the organization tomorrow, all this candidate data in your OneDrive and email would become orphaned?
+
+[00:10:52] Aditya Kulkarni: Hmm. I suppose so, yes. Unless someone thought to transfer it. That's a risk I hadn't thought about.
+
+[00:11:02] Priya Nair: It's a significant risk. We'll include it in our recommendations. Aditya, thanks so much for being candid and thorough. This has been incredibly useful.
+
+[00:11:12] Aditya Kulkarni: No problem. Let me know what else you need.
+
+--- TRANSCRIPT ENDS ---
+
+Session Duration: 1 hour 28 minutes
+Systems Mentioned: LinkedIn (Recruiter license), Naukri (corporate account), MS Teams, OneDrive, HRIS, Email (Outlook)
+Third Parties Mentioned: 4-5 recruitment consultants (names not provided), CIBIL (credit bureau)
+Data Elements Identified: Candidate resumes, Aadhaar, PAN, DL, education certs, salary slips, increment letters, photographs, relieving letters, family details, nominee details, addresses, blood group, emergency contacts, interview feedback, CIBIL scores
+Key Gaps Flagged:
+  - No data processing agreements with recruitment consultants
+  - No privacy notice or consent at point of data collection from candidates
+  - No explicit consent for CIBIL credit check
+  - Candidate data retained indefinitely (300-400 per year, no deletion)
+  - Sensitive documents in personal OneDrive and email, not centralized
+  - No succession plan for data if TA lead leaves organization
+Follow-up Required:
+  - Obtain copy of "Employee Personal Details Form"
+  - Schedule session with Mr. Abc (field hiring)
+  - Confirm CIBIL check mechanics with HR Ops (Sunita)

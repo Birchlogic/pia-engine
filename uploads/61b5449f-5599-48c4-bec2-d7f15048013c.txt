@@ -1,0 +1,181 @@
+ANALYST FIELD NOTES — DATA MAPPING WALKTHROUGH
+Project: DPDPA Compliance Assessment 2026
+Department: Human Resources — Data Mapping Verification
+Session: 5 of 5 — Data Mapping Walkthrough & Verification
+Date: Wednesday, 22 January 2026
+Time: 3:00 PM – 4:45 PM IST
+Location: Client HQ, HR Operations Room (In-Person, working session)
+Analyst: Rohan Desai (Privacy Analyst, Birchlogic)
+Participants: Sunita Menon (Head – HR Ops), Kavitha R (HR Ops Executive)
+Recording: None (Working session, not recorded)
+Assessment Criteria: Data Storage, Security Measures, Cross-Border Transfers, Retention & Deletion
+
+--- NOTES BEGIN ---
+
+PURPOSE: Hands-on walkthrough of systems and storage locations to verify data inventory
+compiled from Sessions 1-4. Sunita walked me through the HRIS and Kavitha showed me the
+physical filing system and shared drive structure.
+
+== HRIS WALKTHROUGH (greytHR) ==
+
+Sunita logged into greytHR and showed me the following modules:
+
+1. EMPLOYEE MASTER DATA MODULE
+   - Fields observed: Employee ID, Full Name, Date of Birth, Gender, Father's Name,
+     Mother's Name, Spouse Name, Marital Status, Blood Group, Nationality, Religion,
+     Aadhaar Number, PAN Number, UAN (Universal Account Number for PF), ESI Number,
+     Passport Number (optional), Driving License Number, Current Address, Permanent Address,
+     Personal Email, Personal Phone, Emergency Contact (Name, Relationship, Phone),
+     Date of Joining, Department, Designation, Grade, Reporting Manager, Location/Branch
+   - NOTE: greytHR stores Aadhaar and PAN as plain text fields. No masking.
+   - NOTE: Religion field is populated. This is sensitive personal data under DPDPA.
+     Asked Sunita why religion is collected. She said "it was in the system when we
+     configured it. I think it might be for leave eligibility — some holidays are
+     religion-specific." This needs review — collecting religion may not be necessary.
+   - Active employees: ~1,200. Separated employees still visible: ~400+.
+
+2. PAYROLL MODULE
+   - Contains full CTC structure per employee: Basic, HRA, Special Allowance, Conveyance,
+     Medical Allowance, LTA, PF (Employer + Employee), ESI, Professional Tax, TDS
+   - Bank account number and IFSC code stored here
+   - Monthly payroll runs visible with full breakdowns
+   - Payslips generated as PDFs — employees can access their own payslips through
+     employee self-service portal
+   - NOTE: Self-service portal access is via employee ID + password. No MFA.
+
+3. LEAVE MODULE
+   - Leave balances, applications, approvals
+   - Medical leave applications sometimes have doctor's notes attached as file uploads
+   - NOTE: Doctor's notes are health data. Stored in cloud with no separate access control.
+
+4. DOCUMENTS MODULE
+   - Employee documents can be uploaded and stored per employee record
+   - Observed: Aadhaar copies, PAN copies, offer letters, appointment letters
+   - NOT ALL employees have documents uploaded. Kavitha confirmed that upload is
+     inconsistent — "we upload when we have time, but there's always a backlog."
+   - Older employees who were migrated from Excel don't have documents in the system at all.
+
+== ONEDRIVE FOLDER STRUCTURE ==
+
+Kavitha showed me the HR Ops shared OneDrive structure:
+
+HR_Operations/
+  ├── New_Joiners_2024/
+  │   ├── [Employee Name]/
+  │   │   ├── Aadhaar.pdf
+  │   │   ├── PAN.pdf
+  │   │   ├── Education_Certs.pdf
+  │   │   ├── Salary_Slips.pdf
+  │   │   ├── Personal_Details_Form.docx
+  │   │   ├── CIBIL_Report.pdf
+  │   │   └── Offer_Letter.pdf
+  │   └── ...
+  ├── New_Joiners_2025/
+  │   └── [same structure]
+  ├── New_Joiners_2026/
+  │   └── [same structure, 12 employees so far]
+  ├── BGV_Reports/
+  │   ├── [Employee Name]_BGV.pdf
+  │   └── ...
+  ├── Insurance/
+  │   ├── Census_2024-25.xlsx
+  │   ├── Census_2025-26.xlsx
+  │   ├── Health_Declarations/
+  │   │   ├── [Employee Name]_Health_Declaration.pdf
+  │   │   └── ...
+  │   ├── Claims/
+  │   │   ├── [Employee Name]_Claim_[Date].pdf
+  │   │   └── ...
+  │   └── Policy_Documents/
+  ├── Payroll/
+  │   ├── Payroll_Input_Jan2026.xlsx
+  │   ├── Payroll_Input_Dec2025.xlsx
+  │   └── ... (going back 2 years)
+  ├── Exit/
+  │   ├── FnF_Tracker.xlsx
+  │   └── Exit_Interviews.xlsx
+  └── MIS_Reports/
+      ├── Headcount_Jan2026.xlsx
+      └── ...
+
+OBSERVATIONS:
+- Folder naming uses real employee names, not IDs. Anyone with folder access can browse
+  by name.
+- OneDrive sharing: Kavitha confirmed the HR_Operations folder is shared with all 6 team
+  members. There's no subfolder-level restriction.
+- Insurance/Claims contains hospital bills, diagnostic reports, discharge summaries.
+  This is SENSITIVE HEALTH DATA stored alongside general HR documents with no additional
+  access controls.
+- CIBIL reports in individual employee folders contain credit scores and financial data.
+- Payroll input files contain bank account numbers. Historical files going back 2 years.
+
+== PHYSICAL FILE ROOM ==
+
+Kavitha took me to the physical filing room (small room adjacent to HR office).
+
+- Metal filing cabinets, 4 units, each with 4 drawers
+- Files organized by department, then alphabetically by employee name
+- Each file is a manila folder containing: printed offer letter, printed personal details
+  form, photocopies of Aadhaar, PAN, education certificates, physical photographs,
+  health declaration form (original signed copy), any correspondence
+- Storeroom in basement contains older files (pre-2023). Kavitha says "about 15-20 boxes."
+  Nobody has inventoried the storeroom in at least 2 years.
+- Filing room is locked. HR Ops team members have the key. No visitor log.
+- No fire suppression or climate control in the filing room.
+- Storeroom in basement is not locked. Kavitha: "Anyone in the building could technically
+  walk in. It's just a storage room."
+
+== INSURANCE DATA DEEP DIVE ==
+
+Opened Census_2025-26.xlsx on Sunita's machine.
+
+Columns: Employee ID, Employee Name, DOB, Gender, DOJ, Designation, Location, Annual CTC,
+Sum Insured, Policy Type (Individual/Family), Spouse Name, Spouse DOB, Child 1 Name,
+Child 1 DOB, Child 2 Name, Child 2 DOB, Father Name, Father DOB, Mother Name, Mother DOB,
+Pre-Existing Conditions (Y/N), If Yes - Details, Nominated Relationship
+
+NOTE: "Pre-Existing Conditions - Details" column contains entries like:
+  - "Diabetes Type 2, on medication since 2019"
+  - "Hypertension, controlled"
+  - "Asthma — childhood onset"
+  - "Previous knee surgery 2021"
+
+This is detailed health data of employees and their family members sitting in an Excel file
+on OneDrive, shared with the full HR Ops team, and emailed to the insurance broker annually.
+HIGH RISK finding.
+
+== CROSS-BORDER TRANSFER CHECK ==
+
+Asked Sunita explicitly: Does any employee data leave India?
+
+Sunita: "Not that I'm aware of. greytHR is India-hosted. OneDrive... I think our Microsoft
+tenant is India but I'm not certain. Email goes through Microsoft 365 so I suppose the
+data is wherever Microsoft stores it. But we don't intentionally send data outside India."
+
+NOTE: Need to verify Microsoft 365 tenant data residency with IT team. If M365 data is
+stored outside India, that's a cross-border transfer for ALL email and OneDrive data,
+which is essentially ALL HR data.
+
+== SUMMARY OF KEY FINDINGS FROM THIS SESSION ==
+
+1. greytHR stores Aadhaar and PAN as unmasked plain text
+2. Religion data collected — possibly unnecessary
+3. ~400 separated employee records with no archival/deletion timeline
+4. Self-service portal has no MFA
+5. Doctor's notes (health data) stored in leave module without additional access controls
+6. OneDrive folder structure exposes all employee data to entire HR Ops team
+7. Insurance census with health data in shared folder and emailed to external party
+8. Claims folder contains hospital records — highly sensitive, broadly accessible
+9. Physical files: filing room has minimal security, storeroom is UNLOCKED
+10. No inventory of storeroom contents
+11. Microsoft 365 data residency needs verification for cross-border assessment
+12. Payroll files with bank details stored historically with no purge cycle
+
+--- NOTES END ---
+
+Next Steps:
+  - Compile consolidated data inventory for HR vertical
+  - Cross-reference all findings with DPDPA requirements
+  - Draft Data Matrix rows for AI pipeline testing
+  - Coordinate with IT team for M365 data residency verification
+  - Present preliminary findings to Meena Sharma for factual review
