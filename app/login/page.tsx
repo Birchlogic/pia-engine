@@ -1,113 +1,11 @@
-"use client";
-
-import { useState } from "react";
-import { signIn } from "next-auth/react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Suspense } from "react";
-import type { Metadata } from "next"; // Import Metadata type
+import type { Metadata } from "next";
+import { LoginForm } from "@/components/login-form";
 
 export const metadata: Metadata = {
     title: "K&S DIGIPROTECT | Login",
     description: "Secure login for privacy analysts",
 };
-
-function LoginForm() {
-    const router = useRouter();
-    const searchParams = useSearchParams();
-    const callbackUrl = searchParams.get("callbackUrl") || "/dashboard/orgs";
-    const [email, setEmail] = useState("");
-    const [password, setPassword] = useState("");
-    const [error, setError] = useState("");
-    const [loading, setLoading] = useState(false);
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setLoading(true);
-        setError("");
-
-        const result = await signIn("credentials", {
-            email,
-            password,
-            redirect: false,
-        });
-
-        if (result?.error) {
-            setError(result.error);
-            setLoading(false);
-        } else {
-            router.push(callbackUrl);
-        }
-    };
-
-    return (
-        <div className="min-h-screen flex items-center justify-center bg-background">
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-primary/10" />
-            <Card className="relative w-full max-w-md mx-4 border-border/50 bg-card/80 backdrop-blur-sm shadow-2xl">
-                <CardHeader className="space-y-3 text-center">
-                    <div className="mx-auto w-16 h-16 flex items-center justify-center mb-2">
-                        <img src="/logo.jpeg" alt="K&S Logo" className="w-full h-full object-contain rounded-lg" />
-                    </div>
-                    <CardTitle className="text-2xl font-bold tracking-tight">K&S DIGIPROTECT</CardTitle>
-                    <CardDescription className="text-muted-foreground">
-                        Privacy Impact Assessment Engine
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        {error && (
-                            <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm border border-destructive/20">
-                                {error}
-                            </div>
-                        )}
-                        <div className="space-y-2">
-                            <Label htmlFor="email">Email</Label>
-                            <Input
-                                id="email"
-                                type="email"
-                                placeholder="you@birchlogic.com"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                required
-                                autoFocus
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="password">Password</Label>
-                            <Input
-                                id="password"
-                                type="password"
-                                placeholder="••••••••"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                required
-                            />
-                        </div>
-                        <Button type="submit" className="w-full" disabled={loading}>
-                            {loading ? (
-                                <span className="flex items-center gap-2">
-                                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                    </svg>
-                                    Signing in...
-                                </span>
-                            ) : (
-                                "Sign in"
-                            )}
-                        </Button>
-                        <p className="text-xs text-center text-muted-foreground mt-4">
-                            Demo: admin@kaizen.ai / password123
-                        </p>
-                    </form>
-                </CardContent>
-            </Card>
-        </div>
-    );
-}
 
 export default function LoginPage() {
     return (
