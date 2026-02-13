@@ -39,10 +39,10 @@ export async function generateDFD(options: GenerateDFDOptions) {
                     name: true,
                     organization: { select: { name: true } },
                 },
-            },
-            matrixRows: { orderBy: { riskScore: "desc" } },
-            dataMatrix: { select: { id: true, status: true } },
-        },
+            } as any,
+            matrixRows: { orderBy: { riskScore: "desc" } } as any,
+            dataMatrix: { select: { id: true, status: true } } as any,
+        } as any,
     });
 
     if (!vertical) throw new Error("Vertical not found");
@@ -54,7 +54,7 @@ export async function generateDFD(options: GenerateDFDOptions) {
     // ── Step 2: Prepare compact matrix summary for LLM ──
     emit("generating_mermaid", "Preparing data for Mermaid generation...", 20);
 
-    const matrixSummary = matrixRows.map((row) => ({
+    const matrixSummary = matrixRows.map((row: any) => ({
         data_element: row.dataElementName,
         category: row.dataCategory,
         data_subjects: row.dataSubjects,

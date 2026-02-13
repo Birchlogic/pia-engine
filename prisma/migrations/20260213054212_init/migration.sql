@@ -22,33 +22,6 @@ CREATE TYPE "FileType" AS ENUM ('transcript_doc', 'audio', 'video', 'policy_doc'
 -- CreateEnum
 CREATE TYPE "TranscriptionStatus" AS ENUM ('not_applicable', 'pending', 'processing', 'completed', 'failed');
 
--- CreateEnum
-CREATE TYPE "DataCategory" AS ENUM ('personal', 'sensitive_personal', 'non_personal', 'anonymized', 'pseudonymized');
-
--- CreateEnum
-CREATE TYPE "EncryptionStatus" AS ENUM ('yes', 'no', 'partial', 'unknown');
-
--- CreateEnum
-CREATE TYPE "MatrixRowStatus" AS ENUM ('draft', 'under_review', 'approved');
-
--- CreateEnum
-CREATE TYPE "MatrixStatus" AS ENUM ('draft', 'under_review', 'approved');
-
--- CreateEnum
-CREATE TYPE "DFDType" AS ENUM ('vertical', 'master');
-
--- CreateEnum
-CREATE TYPE "DFDStatus" AS ENUM ('draft', 'approved');
-
--- CreateEnum
-CREATE TYPE "DFDNodeType" AS ENUM ('data_source', 'processing_activity', 'data_store', 'external_entity', 'system_application', 'vertical_owner');
-
--- CreateEnum
-CREATE TYPE "RiskLevel" AS ENUM ('low', 'medium', 'high', 'critical');
-
--- CreateEnum
-CREATE TYPE "GeneratedBy" AS ENUM ('ai', 'manual');
-
 -- CreateTable
 CREATE TABLE "users" (
     "id" TEXT NOT NULL,
@@ -155,56 +128,10 @@ CREATE TABLE "session_files" (
 );
 
 -- CreateTable
-CREATE TABLE "data_matrix_rows" (
-    "id" TEXT NOT NULL,
-    "vertical_id" TEXT NOT NULL,
-    "data_element_name" TEXT NOT NULL,
-    "data_category" "DataCategory" NOT NULL,
-    "data_sub_category" TEXT,
-    "data_subjects" TEXT[],
-    "source_of_data" TEXT,
-    "collection_method" TEXT,
-    "purpose_of_processing" TEXT,
-    "legal_basis" TEXT,
-    "consent_mechanism" JSONB,
-    "processing_types" TEXT[],
-    "systems_applications" TEXT[],
-    "storage_location" TEXT,
-    "storage_format" TEXT,
-    "encryption_at_rest" "EncryptionStatus" NOT NULL DEFAULT 'unknown',
-    "encryption_in_transit" "EncryptionStatus" NOT NULL DEFAULT 'unknown',
-    "retention_period" TEXT,
-    "retention_compliant" BOOLEAN,
-    "deletion_method" TEXT,
-    "access_roles" JSONB,
-    "data_recipients_internal" TEXT[],
-    "data_recipients_external" TEXT[],
-    "third_party_details" JSONB,
-    "cross_border_transfer" BOOLEAN NOT NULL DEFAULT false,
-    "cross_border_details" JSONB,
-    "data_owner" TEXT,
-    "risk_score" INTEGER NOT NULL DEFAULT 1,
-    "confidence_score" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "gaps_flagged" TEXT[],
-    "source_session_ids" TEXT[],
-    "status" "MatrixRowStatus" NOT NULL DEFAULT 'draft',
-    "reviewed_by" TEXT,
-    "reviewed_at" TIMESTAMP(3),
-    "generated_by" "GeneratedBy" NOT NULL DEFAULT 'ai',
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "data_matrix_rows_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "data_matrices" (
     "id" TEXT NOT NULL,
     "vertical_id" TEXT NOT NULL,
-    "status" "MatrixStatus" NOT NULL DEFAULT 'draft',
-    "approved_by" TEXT,
-    "approved_at" TIMESTAMP(3),
-    "generation_metadata" JSONB,
+    "schema_one_json" JSONB NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
@@ -212,53 +139,33 @@ CREATE TABLE "data_matrices" (
 );
 
 -- CreateTable
+CREATE TABLE "data_mapping_rows" (
+    "id" TEXT NOT NULL,
+    "vertical_id" TEXT NOT NULL,
+    "s_no" INTEGER NOT NULL,
+    "data_category" TEXT NOT NULL,
+    "description" TEXT NOT NULL,
+    "purpose" TEXT NOT NULL,
+    "data_owner" TEXT NOT NULL,
+    "storage_location" TEXT NOT NULL,
+    "data_classification" TEXT NOT NULL,
+    "retention_period" TEXT NOT NULL,
+    "legal_basis" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "data_mapping_rows_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "dfd_graphs" (
     "id" TEXT NOT NULL,
-    "project_id" TEXT NOT NULL,
-    "vertical_id" TEXT,
-    "dfd_type" "DFDType" NOT NULL,
-    "graph_data" JSONB,
-    "layout_config" JSONB,
-    "status" "DFDStatus" NOT NULL DEFAULT 'draft',
-    "approved_by" TEXT,
-    "approved_at" TIMESTAMP(3),
-    "generated_from_matrix_ids" TEXT[],
+    "vertical_id" TEXT NOT NULL,
+    "mermaid_code" TEXT NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "dfd_graphs_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "dfd_nodes" (
-    "id" TEXT NOT NULL,
-    "dfd_graph_id" TEXT NOT NULL,
-    "node_type" "DFDNodeType" NOT NULL,
-    "label" TEXT NOT NULL,
-    "metadata" JSONB,
-    "position_x" DOUBLE PRECISION NOT NULL,
-    "position_y" DOUBLE PRECISION NOT NULL,
-    "risk_level" "RiskLevel",
-    "vertical_id" TEXT,
-
-    CONSTRAINT "dfd_nodes_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "dfd_edges" (
-    "id" TEXT NOT NULL,
-    "dfd_graph_id" TEXT NOT NULL,
-    "source_node_id" TEXT NOT NULL,
-    "target_node_id" TEXT NOT NULL,
-    "data_elements" TEXT[],
-    "data_classification" TEXT,
-    "processing_type" TEXT,
-    "is_encrypted" BOOLEAN NOT NULL DEFAULT false,
-    "is_cross_border" BOOLEAN NOT NULL DEFAULT false,
-    "risk_level" "RiskLevel" NOT NULL DEFAULT 'low',
-    "metadata" JSONB,
-
-    CONSTRAINT "dfd_edges_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
@@ -266,6 +173,9 @@ CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "data_matrices_vertical_id_key" ON "data_matrices"("vertical_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "dfd_graphs_vertical_id_key" ON "dfd_graphs"("vertical_id");
 
 -- AddForeignKey
 ALTER TABLE "users" ADD CONSTRAINT "users_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "organizations"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -301,34 +211,10 @@ ALTER TABLE "session_files" ADD CONSTRAINT "session_files_session_id_fkey" FOREI
 ALTER TABLE "session_files" ADD CONSTRAINT "session_files_uploaded_by_fkey" FOREIGN KEY ("uploaded_by") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "data_matrix_rows" ADD CONSTRAINT "data_matrix_rows_vertical_id_fkey" FOREIGN KEY ("vertical_id") REFERENCES "verticals"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "data_matrix_rows" ADD CONSTRAINT "data_matrix_rows_reviewed_by_fkey" FOREIGN KEY ("reviewed_by") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "data_matrices" ADD CONSTRAINT "data_matrices_vertical_id_fkey" FOREIGN KEY ("vertical_id") REFERENCES "verticals"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "data_matrices" ADD CONSTRAINT "data_matrices_approved_by_fkey" FOREIGN KEY ("approved_by") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "data_mapping_rows" ADD CONSTRAINT "data_mapping_rows_vertical_id_fkey" FOREIGN KEY ("vertical_id") REFERENCES "verticals"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "dfd_graphs" ADD CONSTRAINT "dfd_graphs_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "dfd_graphs" ADD CONSTRAINT "dfd_graphs_vertical_id_fkey" FOREIGN KEY ("vertical_id") REFERENCES "verticals"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "dfd_graphs" ADD CONSTRAINT "dfd_graphs_approved_by_fkey" FOREIGN KEY ("approved_by") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "dfd_nodes" ADD CONSTRAINT "dfd_nodes_dfd_graph_id_fkey" FOREIGN KEY ("dfd_graph_id") REFERENCES "dfd_graphs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "dfd_edges" ADD CONSTRAINT "dfd_edges_dfd_graph_id_fkey" FOREIGN KEY ("dfd_graph_id") REFERENCES "dfd_graphs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "dfd_edges" ADD CONSTRAINT "dfd_edges_source_node_id_fkey" FOREIGN KEY ("source_node_id") REFERENCES "dfd_nodes"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "dfd_edges" ADD CONSTRAINT "dfd_edges_target_node_id_fkey" FOREIGN KEY ("target_node_id") REFERENCES "dfd_nodes"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "dfd_graphs" ADD CONSTRAINT "dfd_graphs_vertical_id_fkey" FOREIGN KEY ("vertical_id") REFERENCES "verticals"("id") ON DELETE CASCADE ON UPDATE CASCADE;

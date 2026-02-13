@@ -233,7 +233,7 @@ export async function llmCall<T extends z.ZodTypeAny>(
     const temperature = options.temperature ?? 0.1;
 
     const defaultModel =
-        provider === "anthropic" ? "claude-3-5-sonnet-20240620" : "gpt-4o";
+        provider === "anthropic" ? "claude-sonnet-4-20250514" : "gpt-4o";
     const model = options.model ?? defaultModel;
 
     let lastError: Error | null = null;
