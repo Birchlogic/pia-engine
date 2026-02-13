@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
+import { ModeToggle } from "@/components/mode-toggle";
 
 const navItems = [
     {
@@ -72,13 +73,11 @@ export default function DashboardLayout({
                             <SidebarMenuButton size="lg" asChild>
                                 <Link href="/dashboard/orgs">
                                     <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
-                                        </svg>
+                                        <img src="/logo.jpeg" alt="K&S Logo" className="h-8 w-8 rounded-md object-cover" />
                                     </div>
                                     <div className="grid flex-1 text-left text-sm leading-tight">
-                                        <span className="truncate font-semibold">KaizenAI</span>
-                                        <span className="truncate text-xs text-muted-foreground">PIA Engine</span>
+                                        <span className="truncate font-semibold">K&S DIGIPROTECT</span>
+                                        <span className="truncate text-xs text-muted-foreground">DFD Automation</span>
                                     </div>
                                 </Link>
                             </SidebarMenuButton>
@@ -160,6 +159,7 @@ export default function DashboardLayout({
                     <SidebarTrigger />
                     <Separator orientation="vertical" className="h-4" />
                     <div className="flex-1" />
+                    <ModeToggle />
                 </header>
                 <main className="flex-1 p-6">{children}</main>
             </SidebarInset>

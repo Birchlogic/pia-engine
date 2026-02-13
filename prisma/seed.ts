@@ -12,12 +12,14 @@ async function main() {
 
     const admin = await prisma.user.upsert({
         where: { email: "admin@kaizen.ai" },
-        update: {},
         create: {
             email: "admin@kaizen.ai",
-            name: "Karan Singh",
+            name: "Lalit Mohan Joshi",
             password: adminPassword,
             role: "senior_assessor",
+        },
+        update: {
+            name: "Lalit Mohan Joshi",
         },
     });
 
@@ -109,7 +111,7 @@ async function main() {
             sessionDate: new Date("2026-02-10T10:00:00Z"),
             sessionNumber: 1,
             durationMinutes: 45,
-            interviewerNames: ["Karan Singh"],
+            interviewerNames: ["Lalit Mohan Joshi"],
             intervieweeNames: ["Priya Sharma"],
             intervieweeRoles: ["VP HR"],
             assessmentCriteriaTags: ["data_collection", "data_storage", "access_controls", "retention_deletion"],

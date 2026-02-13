@@ -6,8 +6,14 @@ import { Providers } from "@/components/providers";
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "KaizenAI — Privacy Impact Assessment Engine",
-  description: "AI-powered Privacy Impact Assessment platform that generates organizational-level PIAs from unstructured interview data.",
+  title: {
+    template: "%s | K&S DIGIPROTECT",
+    default: "K&S DIGIPROTECT — DFD Automation",
+  },
+  description: "AI-powered Privacy Impact Assessment and Data Flow Diagram Generator",
+  icons: {
+    icon: "/logo.jpeg",
+  },
 };
 
 export default function RootLayout({
@@ -16,7 +22,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased`} suppressHydrationWarning>
         <Providers>{children}</Providers>
       </body>

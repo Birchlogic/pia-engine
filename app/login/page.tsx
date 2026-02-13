@@ -8,6 +8,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Suspense } from "react";
+import type { Metadata } from "next"; // Import Metadata type
+
+export const metadata: Metadata = {
+    title: "K&S DIGIPROTECT | Login",
+    description: "Secure login for privacy analysts",
+};
 
 function LoginForm() {
     const router = useRouter();
@@ -42,12 +48,10 @@ function LoginForm() {
             <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-primary/10" />
             <Card className="relative w-full max-w-md mx-4 border-border/50 bg-card/80 backdrop-blur-sm shadow-2xl">
                 <CardHeader className="space-y-3 text-center">
-                    <div className="mx-auto w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-primary">
-                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
-                        </svg>
+                    <div className="mx-auto w-16 h-16 flex items-center justify-center mb-2">
+                        <img src="/logo.jpeg" alt="K&S Logo" className="w-full h-full object-contain rounded-lg" />
                     </div>
-                    <CardTitle className="text-2xl font-bold tracking-tight">KaizenAI</CardTitle>
+                    <CardTitle className="text-2xl font-bold tracking-tight">K&S DIGIPROTECT</CardTitle>
                     <CardDescription className="text-muted-foreground">
                         Privacy Impact Assessment Engine
                     </CardDescription>

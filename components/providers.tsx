@@ -6,6 +6,8 @@ import { useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
+import { ThemeProvider as NextThemesProvider } from "next-themes";
+
 export function Providers({ children }: { children: React.ReactNode }) {
     const [queryClient] = useState(
         () =>
@@ -22,10 +24,17 @@ export function Providers({ children }: { children: React.ReactNode }) {
     return (
         <SessionProvider>
             <QueryClientProvider client={queryClient}>
-                <TooltipProvider>
-                    {children}
-                    <Toaster richColors position="top-right" />
-                </TooltipProvider>
+                <NextThemesProvider
+                    attribute="class"
+                    defaultTheme="system"
+                    enableSystem
+                    disableTransitionOnChange
+                >
+                    <TooltipProvider>
+                        {children}
+                        <Toaster richColors position="top-right" />
+                    </TooltipProvider>
+                </NextThemesProvider>
             </QueryClientProvider>
         </SessionProvider>
     );
