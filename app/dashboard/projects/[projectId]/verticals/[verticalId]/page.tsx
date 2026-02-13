@@ -47,6 +47,7 @@ type Session = {
     version: number;
     rawTextNotes: string | null;
     aiSummary: string | null;
+    files: SessionFile[];
     _count: { files: number };
     creator: { name: string };
 };
@@ -403,10 +404,11 @@ export default function VerticalWorkspacePage() {
         } catch (error) {
             console.error("Error deleting session:", error);
             toast.error("An error occurred while deleting the session");
-        } finally {
             setDeletingSession(false);
         }
     };
+
+
 
     const handleGenerateMatrix = async () => {
         setGeneratingMatrix(true);
