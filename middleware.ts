@@ -22,12 +22,26 @@ export async function middleware(request: NextRequest) {
     }
 
     // Check authentication
+    const secret = process.env.NEXTAUTH_SECRET;
+    if (!secret) {
+        console.error("[Middleware] CRITICAL: NEXTAUTH_SECRET is not set in environment variables!");
+    }
+
     const token = await getToken({
         req: request,
-        secret: process.env.NEXTAUTH_SECRET,
+        secret: secret,
     });
 
+    const allCookies = request.cookies.getAll().map(c => c.name).join(", ");
+    console.log(`[Middleware] Debug Info:
+    - Path: ${pathname}
+    - Secret Configured: ${!!secret}
+    - Cookies Present: ${allCookies}
+    - Token Retrieved: ${!!token}
+    `);
+
     if (!token) {
+        console.log("[Middleware] No token found, redirecting to login");
         const loginUrl = new URL("/login", request.url);
         loginUrl.searchParams.set("callbackUrl", pathname);
         return NextResponse.redirect(loginUrl);
