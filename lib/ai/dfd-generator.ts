@@ -1,7 +1,5 @@
 import prisma from "@/lib/db/prisma";
-import { llmCall } from "./llm-client";
-import { mermaidDFDPrompt } from "./prompts";
-import { MermaidDFDResultSchema } from "./schemas";
+import { generateMermaid, type SchemaOne } from "@/lib/ai/mermaid-converter";
 import type { ProgressEvent } from "./schemas";
 
 // ── Types ──
@@ -12,13 +10,12 @@ interface GenerateDFDOptions {
 }
 
 /**
- * LLM-powered Mermaid DFD generation from Data Matrix rows.
+ * Deterministic Mermaid DFD generation from Schema-1 stored in DataMatrix.
  *
  * Pipeline:
- * 1. Load vertical + matrix rows from DB
- * 2. Prepare a compact JSON summary of the matrix data
- * 3. Call LLM with the Mermaid DFD prompt to generate flowchart code
- * 4. Persist the Mermaid code + metadata in DFDGraph.graphData
+ * 1. Load Schema-1 from DataMatrix.schemaOneJson
+ * 2. Convert Schema-1 → Mermaid via mermaid-converter
+ * 3. Upsert DfdGraph.mermaidCode
  */
 export async function generateDFD(options: GenerateDFDOptions) {
     const { verticalId, onProgress } = options;
@@ -27,106 +24,27 @@ export async function generateDFD(options: GenerateDFDOptions) {
         onProgress?.({ step, message, progress, detail });
     };
 
-    // ── Step 1: Load vertical + matrix rows ──
-    emit("loading", "Loading data matrix rows...", 5);
+    emit("loading", "Loading Schema-1...", 10);
 
-    const vertical = await prisma.vertical.findUnique({
-        where: { id: verticalId },
-        include: {
-            project: {
-                select: {
-                    id: true,
-                    name: true,
-                    organization: { select: { name: true } },
-                },
-            } as any,
-            matrixRows: { orderBy: { riskScore: "desc" } } as any,
-            dataMatrix: { select: { id: true, status: true } } as any,
-        } as any,
+    const dataMatrix = await prisma.dataMatrix.findUnique({
+        where: { verticalId },
+        select: { schemaOneJson: true },
     });
 
-    if (!vertical) throw new Error("Vertical not found");
-    if (vertical.matrixRows.length === 0) throw new Error("No data matrix rows found. Generate the Data Matrix first.");
+    if (!dataMatrix?.schemaOneJson) {
+        throw new Error("No Schema-1 found. Generate the Data Matrix first.");
+    }
 
-    const matrixRows = vertical.matrixRows;
-    emit("loading", `Loaded ${matrixRows.length} data matrix rows`, 15);
+    emit("generating_mermaid", "Generating Mermaid diagram...", 40);
+    const schemaOne = dataMatrix.schemaOneJson as unknown as SchemaOne;
+    const mermaidCode = generateMermaid(schemaOne);
 
-    // ── Step 2: Prepare compact matrix summary for LLM ──
-    emit("generating_mermaid", "Preparing data for Mermaid generation...", 20);
-
-    const matrixSummary = matrixRows.map((row: any) => ({
-        data_element: row.dataElementName,
-        category: row.dataCategory,
-        data_subjects: row.dataSubjects,
-        source: row.sourceOfData,
-        collection_method: row.collectionMethod,
-        purpose: row.purposeOfProcessing,
-        systems: row.systemsApplications,
-        storage_location: row.storageLocation,
-        encryption_at_rest: row.encryptionAtRest,
-        encryption_in_transit: row.encryptionInTransit,
-        recipients_internal: row.dataRecipientsInternal,
-        recipients_external: row.dataRecipientsExternal,
-        cross_border: row.crossBorderTransfer,
-        risk_score: row.riskScore,
-        retention: row.retentionPeriod,
-        gaps: row.gapsFlagged,
-    }));
-
-    const matrixDataJson = JSON.stringify(matrixSummary, null, 2);
-
-    // ── Step 3: Call LLM to generate Mermaid code ──
-    emit("generating_mermaid", "Generating Mermaid DFD via LLM...", 30);
-
-    const prompt = mermaidDFDPrompt(
-        matrixDataJson,
-        vertical.name,
-        vertical.project.organization.name
-    );
-
-    const result = await llmCall({
-        prompt,
-        schema: MermaidDFDResultSchema,
-        temperature: 0.2,
-        maxRetries: 2,
+    emit("persisting", "Saving DFD...", 75);
+    const dfdGraph = await prisma.dfdGraph.upsert({
+        where: { verticalId },
+        create: { verticalId, mermaidCode },
+        update: { mermaidCode },
     });
-
-    emit("generating_mermaid", `Mermaid DFD generated: ${result.node_count} nodes, ${result.edge_count} edges`, 70);
-
-    // ── Step 4: Persist to database ──
-    emit("persisting", "Saving DFD to database...", 75);
-
-    // Delete existing DFD for this vertical (regeneration is idempotent)
-    await prisma.dFDGraph.deleteMany({
-        where: { verticalId, dfdType: "vertical" },
-    });
-
-    // Create DFD graph with Mermaid code stored in graphData
-    const dfdGraph = await prisma.dFDGraph.create({
-        data: {
-            projectId: vertical.project.id,
-            verticalId,
-            dfdType: "vertical",
-            status: "draft",
-            generatedFromMatrixIds: vertical.dataMatrix ? [vertical.dataMatrix.id] : [],
-            graphData: {
-                mermaidCode: result.mermaid_code,
-                summary: result.summary,
-                nodeCount: result.node_count,
-                edgeCount: result.edge_count,
-                highRiskFlows: result.high_risk_flows,
-                crossBorderFlows: result.cross_border_flows,
-                unencryptedFlows: result.unencrypted_flows,
-                generatedAt: new Date().toISOString(),
-            },
-            layoutConfig: {
-                type: "mermaid",
-                direction: "LR",
-            },
-        },
-    });
-
-    emit("persisting", "Saving complete", 90);
 
     // Update vertical assessment status
     await prisma.vertical.update({
@@ -134,11 +52,7 @@ export async function generateDFD(options: GenerateDFDOptions) {
         data: { assessmentStatus: "dfd_generated" },
     });
 
-    emit("done", `DFD generated: ${result.node_count} nodes, ${result.edge_count} edges`, 100);
+    emit("done", "DFD generated", 100);
 
-    return {
-        dfdGraphId: dfdGraph.id,
-        nodeCount: result.node_count,
-        edgeCount: result.edge_count,
-    };
+    return { dfdGraphId: dfdGraph.id };
 }

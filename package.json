@@ -20,6 +20,7 @@
     "@aws-sdk/s3-request-presigner": "^3.988.0",
     "@dagrejs/dagre": "^2.0.4",
     "@prisma/client": "^6.19.2",
+    "@supabase/supabase-js": "^2.95.3",
     "@tanstack/react-query": "^5.90.21",
     "@tanstack/react-table": "^8.21.3",
     "@xyflow/react": "^12.10.0",

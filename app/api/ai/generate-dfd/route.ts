@@ -56,8 +56,23 @@ export async function POST(request: Request) {
 
     } catch (err) {
         console.error("Generate DFD error:", err);
+
+        let userMessage = "Failed to generate DFD";
+        if (err instanceof Error) {
+            const msg = err.message;
+            if (msg.includes("Schema-1") || msg.includes("Data Matrix")) {
+                userMessage = msg;
+            } else if (msg.includes("API error")) {
+                userMessage = "AI service is temporarily unavailable. Please try again in a moment.";
+            } else if (msg.includes("rate limit") || msg.includes("429")) {
+                userMessage = "AI rate limit reached. Please wait 60 seconds and try again.";
+            } else {
+                userMessage = msg.length > 200 ? msg.slice(0, 200) + "…" : msg;
+            }
+        }
+
         return NextResponse.json(
-            { error: err instanceof Error ? err.message : "Failed to generate DFD" },
+            { error: userMessage },
             { status: 500 }
         );
     }

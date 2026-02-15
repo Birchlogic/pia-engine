@@ -198,6 +198,34 @@ export default function VerticalWorkspacePage() {
     const [schemaOne, setSchemaOne] = useState<SchemaOneFull | null>(null);
     const [schemaLoading, setSchemaLoading] = useState(false);
 
+    // Session filter sub-tabs
+    const [sessionFilter, setSessionFilter] = useState<"all" | "draft" | "finalized">("all");
+
+    // Rate-limit cooldown timer (60s vanilla timer)
+    const [cooldownSeconds, setCooldownSeconds] = useState(0);
+    const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    const startCooldown = useCallback(() => {
+        setCooldownSeconds(60);
+        if (cooldownRef.current) clearInterval(cooldownRef.current);
+        cooldownRef.current = setInterval(() => {
+            setCooldownSeconds((prev) => {
+                if (prev <= 1) {
+                    if (cooldownRef.current) clearInterval(cooldownRef.current);
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            if (cooldownRef.current) clearInterval(cooldownRef.current);
+        };
+    }, []);
+
+    const isCoolingDown = cooldownSeconds > 0;
 
     const fetchVertical = useCallback(async () => {
         const res = await fetch(`/api/verticals/${verticalId}`);
@@ -411,7 +439,12 @@ export default function VerticalWorkspacePage() {
 
 
     const handleGenerateMatrix = async () => {
+        if (isCoolingDown) {
+            toast.warning(`Please wait ${cooldownSeconds}s before generating again`);
+            return;
+        }
         setGeneratingMatrix(true);
+        toast.loading("Generating Data Matrix — this may take 30-60 seconds...", { id: "matrix-gen" });
         try {
             const res = await fetch("/api/ai/generate-matrix", {
                 method: "POST",
@@ -420,21 +453,28 @@ export default function VerticalWorkspacePage() {
             });
             const data = await res.json();
             if (res.ok) {
-                toast.success(data.message || "Data Matrix generated!");
+                toast.success(data.message || "Data Matrix generated!", { id: "matrix-gen" });
                 fetchMatrixRows();
                 fetchSchemaOne();
                 fetchVertical();
+                startCooldown();
             } else {
-                toast.error(data.error || "Failed to generate Data Matrix");
+                const errMsg = data.error || "Failed to generate Data Matrix";
+                toast.error(errMsg.length > 200 ? errMsg.slice(0, 200) + "…" : errMsg, { id: "matrix-gen" });
             }
         } catch {
-            toast.error("Failed to generate Data Matrix");
+            toast.error("Network error — failed to generate Data Matrix", { id: "matrix-gen" });
         }
         setGeneratingMatrix(false);
     };
 
     const handleGenerateDfd = async () => {
+        if (isCoolingDown) {
+            toast.warning(`Please wait ${cooldownSeconds}s before generating again`);
+            return;
+        }
         setGeneratingDfd(true);
+        toast.loading("Generating DFD — this may take 20-40 seconds...", { id: "dfd-gen" });
         try {
             const res = await fetch("/api/ai/generate-dfd", {
                 method: "POST",
@@ -443,14 +483,16 @@ export default function VerticalWorkspacePage() {
             });
             const data = await res.json();
             if (res.ok) {
-                toast.success("Data Flow Diagram generated!");
+                toast.success("Data Flow Diagram generated!", { id: "dfd-gen" });
                 setMermaidCode(data.mermaidCode);
                 fetchVertical();
+                startCooldown();
             } else {
-                toast.error(data.error || "Failed to generate DFD");
+                const errMsg = data.error || "Failed to generate DFD";
+                toast.error(errMsg.length > 200 ? errMsg.slice(0, 200) + "…" : errMsg, { id: "dfd-gen" });
             }
         } catch {
-            toast.error("Failed to generate DFD");
+            toast.error("Network error — failed to generate DFD", { id: "dfd-gen" });
         }
         setGeneratingDfd(false);
     };
@@ -498,8 +540,17 @@ export default function VerticalWorkspacePage() {
     }
 
     const finalizedSessions = vertical.sessions.filter((s) => s.status === "finalized");
+    const draftSessions = vertical.sessions.filter((s) => s.status === "draft");
     const hasFinalizedSessions = finalizedSessions.length > 0;
     const hasDataMatrix = matrixRows.length > 0;
+    const totalFiles = vertical.sessions.reduce((sum, s) => sum + s._count.files, 0);
+    const allTags = new Set(vertical.sessions.flatMap((s) => s.assessmentCriteriaTags));
+    const criteriaCoverage = Math.round((allTags.size / allCriteria.length) * 100);
+
+    const filteredSessions =
+        sessionFilter === "all"
+            ? vertical.sessions
+            : vertical.sessions.filter((s) => s.status === sessionFilter);
 
     return (
         <div className="space-y-6">
@@ -550,19 +601,103 @@ export default function VerticalWorkspacePage() {
 
                 {/* ────────────── Sessions Tab ────────────── */}
                 <TabsContent value="sessions" className="space-y-4">
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-5 gap-3">
+                        <Card className="py-3">
+                            <CardContent className="px-4 py-0">
+                                <p className="text-xs text-muted-foreground">Total Sessions</p>
+                                <p className="text-2xl font-bold">{vertical.sessions.length}</p>
+                            </CardContent>
+                        </Card>
+                        <Card className="py-3">
+                            <CardContent className="px-4 py-0">
+                                <p className="text-xs text-muted-foreground">Finalized</p>
+                                <p className="text-2xl font-bold text-green-500">{finalizedSessions.length}</p>
+                            </CardContent>
+                        </Card>
+                        <Card className="py-3">
+                            <CardContent className="px-4 py-0">
+                                <p className="text-xs text-muted-foreground">Drafts</p>
+                                <p className="text-2xl font-bold text-yellow-500">{draftSessions.length}</p>
+                            </CardContent>
+                        </Card>
+                        <Card className="py-3">
+                            <CardContent className="px-4 py-0">
+                                <p className="text-xs text-muted-foreground">Files Uploaded</p>
+                                <p className="text-2xl font-bold">{totalFiles}</p>
+                            </CardContent>
+                        </Card>
+                        <Card className="py-3">
+                            <CardContent className="px-4 py-0">
+                                <p className="text-xs text-muted-foreground">Criteria Coverage</p>
+                                <div className="flex items-center gap-2">
+                                    <p className="text-2xl font-bold">{criteriaCoverage}%</p>
+                                    <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                                        <div
+                                            className={`h-full rounded-full transition-all ${criteriaCoverage >= 80 ? "bg-green-500" : criteriaCoverage >= 50 ? "bg-yellow-500" : "bg-red-500"}`}
+                                            style={{ width: `${criteriaCoverage}%` }}
+                                        />
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {/* Cooldown Banner */}
+                    {isCoolingDown && (
+                        <Card className="border-amber-500/30 bg-amber-500/5">
+                            <CardContent className="py-2 px-4 flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+                                    <span className="text-sm font-bold text-amber-500 tabular-nums">{cooldownSeconds}</span>
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                    AI generation cooldown — please wait {cooldownSeconds}s before triggering another generation.
+                                </p>
+                            </CardContent>
+                        </Card>
+                    )}
+
+                    {/* Generation Loading Overlay */}
+                    {generatingMatrix && (
+                        <Card className="border-primary/30 bg-primary/5">
+                            <CardContent className="py-4 px-4 flex items-center gap-4">
+                                <div className="w-10 h-10 rounded-full border-2 border-primary border-t-transparent animate-spin flex-shrink-0" />
+                                <div>
+                                    <p className="text-sm font-medium">Generating Data Matrix...</p>
+                                    <p className="text-xs text-muted-foreground">AI is analyzing your session transcripts. This may take 30-60 seconds.</p>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
+
+                    {/* Filter Sub-tabs + Actions */}
                     <div className="flex items-center justify-between">
-                        <p className="text-sm text-muted-foreground">
-                            {finalizedSessions.length} finalized, {vertical.sessions.length - finalizedSessions.length} drafts
-                        </p>
+                        <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                            {(["all", "finalized", "draft"] as const).map((filter) => (
+                                <button
+                                    key={filter}
+                                    onClick={() => setSessionFilter(filter)}
+                                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                                        sessionFilter === filter
+                                            ? "bg-background text-foreground shadow-sm"
+                                            : "text-muted-foreground hover:text-foreground"
+                                    }`}
+                                >
+                                    {filter === "all" ? `All (${vertical.sessions.length})` :
+                                     filter === "finalized" ? `Finalized (${finalizedSessions.length})` :
+                                     `Drafts (${draftSessions.length})`}
+                                </button>
+                            ))}
+                        </div>
 
                         <div className="flex items-center gap-2">
                             {/* Generate Data Matrix Button */}
                             {hasFinalizedSessions && (
                                 <Button
                                     onClick={handleGenerateMatrix}
-                                    disabled={generatingMatrix}
+                                    disabled={generatingMatrix || isCoolingDown}
                                 >
-                                    {generatingMatrix ? "Generating..." : "Generate Data Matrix"}
+                                    {generatingMatrix ? "Generating..." : isCoolingDown ? `Wait ${cooldownSeconds}s` : "Generate Data Matrix"}
                                 </Button>
                             )}
 
@@ -742,9 +877,17 @@ export default function VerticalWorkspacePage() {
                                 <Button onClick={() => setNewDialogOpen(true)}>Create Session</Button>
                             </CardContent>
                         </Card>
+                    ) : filteredSessions.length === 0 ? (
+                        <Card className="border-dashed">
+                            <CardContent className="flex flex-col items-center justify-center py-8">
+                                <p className="text-muted-foreground text-sm">
+                                    No {sessionFilter} sessions found.
+                                </p>
+                            </CardContent>
+                        </Card>
                     ) : (
                         <div className="space-y-3">
-                            {vertical.sessions.map((session) => (
+                            {filteredSessions.map((session) => (
                                 <Collapsible
                                     key={session.id}
                                     open={expandedSessions.has(session.id)}

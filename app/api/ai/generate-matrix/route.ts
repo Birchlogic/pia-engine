@@ -189,8 +189,25 @@ export async function POST(request: Request) {
 
     } catch (err) {
         console.error("Generate matrix error:", err);
+
+        let userMessage = "Failed to generate data matrix";
+        if (err instanceof Error) {
+            const msg = err.message;
+            if (msg.includes("LLM call failed")) {
+                userMessage = "AI analysis failed after multiple attempts. This can happen with complex transcripts. Please try again — the AI may produce better results on retry.";
+            } else if (msg.includes("API error")) {
+                userMessage = "AI service is temporarily unavailable. Please try again in a moment.";
+            } else if (msg.includes("rate limit") || msg.includes("429")) {
+                userMessage = "AI rate limit reached. Please wait 60 seconds and try again.";
+            } else if (msg.includes("No finalized sessions") || msg.includes("No transcript")) {
+                userMessage = msg;
+            } else {
+                userMessage = msg.length > 200 ? msg.slice(0, 200) + "…" : msg;
+            }
+        }
+
         return NextResponse.json(
-            { error: err instanceof Error ? err.message : "Failed to generate data matrix" },
+            { error: userMessage },
             { status: 500 }
         );
     }
