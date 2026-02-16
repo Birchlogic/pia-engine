@@ -186,6 +186,7 @@ export default function VerticalWorkspacePage() {
     const [mermaidCode, setMermaidCode] = useState<string | null>(null);
     const [dfdLoading, setDfdLoading] = useState(false);
     const [generatingDfd, setGeneratingDfd] = useState(false);
+    const [downloadingFiles, setDownloadingFiles] = useState<Set<string>>(new Set());
     const mermaidRef = useRef<HTMLDivElement>(null);
     const [activeTab, setActiveTab] = useState("sessions");
 
@@ -1032,6 +1033,93 @@ export default function VerticalWorkspacePage() {
                                                     <div className="mt-4 p-4 bg-primary/5 rounded-lg border border-primary/10">
                                                         <p className="text-xs font-medium text-primary mb-2">AI Summary</p>
                                                         <p className="text-sm">{session.aiSummary}</p>
+                                                    </div>
+                                                )}
+
+                                                {/* Files Section */}
+                                                {session.files && session.files.length > 0 && (
+                                                    <div className="mt-4">
+                                                        <p className="text-xs font-medium text-muted-foreground mb-2">Uploaded Files</p>
+                                                        <div className="space-y-2">
+                                                            {session.files.map((file) => (
+                                                                <div key={file.id} className="flex items-center justify-between bg-muted/30 rounded-lg p-3">
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center">
+                                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-primary">
+                                                                                <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                                                                            </svg>
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="text-sm font-medium">{file.fileName}</p>
+                                                                            <p className="text-xs text-muted-foreground">
+                                                                                {(Number(file.fileSizeBytes) / 1024 / 1024).toFixed(2)} MB
+                                                                            </p>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Button
+                                                                            variant="outline"
+                                                                            size="sm"
+                                                                            disabled={downloadingFiles.has(file.id)}
+                                                                            onClick={async () => {
+                                                setDownloadingFiles(prev => new Set(prev).add(file.id));
+                                                try {
+                                                    const response = await fetch(`/api/sessions/${session.id}/files/${file.id}`);
+                                                    const data = await response.json();
+                                                    if (response.ok) {
+                                                        // Fetch the file from the signed URL
+                                                        const fileResponse = await fetch(data.downloadUrl);
+                                                        if (fileResponse.ok) {
+                                                            const blob = await fileResponse.blob();
+                                                            const url = window.URL.createObjectURL(blob);
+                                                            const a = document.createElement('a');
+                                                            a.href = url;
+                                                            a.download = file.fileName;
+                                                            document.body.appendChild(a);
+                                                            a.click();
+                                                            document.body.removeChild(a);
+                                                            window.URL.revokeObjectURL(url);
+                                                            toast.success(`Downloaded ${file.fileName}`);
+                                                        } else {
+                                                            toast.error('Failed to download file');
+                                                        }
+                                                    } else {
+                                                        toast.error(data.error || 'Failed to get download URL');
+                                                    }
+                                                } catch {
+                                                    toast.error('Failed to download file');
+                                                } finally {
+                                                    setDownloadingFiles(prev => {
+                                                        const newSet = new Set(prev);
+                                                        newSet.delete(file.id);
+                                                        return newSet;
+                                                    });
+                                                }
+                                            }}
+                                                                        >
+                                                                            {downloadingFiles.has(file.id) ? (
+                                                                                <>
+                                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 mr-1 animate-spin">
+                                                                                        <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                                                        <path d="M9 12l2 2 4-4" />
+                                                                                    </svg>
+                                                                                    Downloading...
+                                                                                </>
+                                                                            ) : (
+                                                                                <>
+                                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 mr-1">
+                                                                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                                                                        <polyline points="7 10 12 15 17 10" />
+                                                                                        <line x1="12" x2="12" y1="15" y2="3" />
+                                                                                    </svg>
+                                                                                    Download
+                                                                                </>
+                                                                            )}
+                                                                        </Button>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
                                                     </div>
                                                 )}
                                             </CardContent>

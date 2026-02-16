@@ -17,6 +17,24 @@ export const supabase = createClient(
 export const BUCKET_NAME = "session-files";
 
 /**
+ * Check if the storage bucket exists.
+ */
+export async function checkBucketExists(): Promise<boolean> {
+    try {
+        const { data, error } = await supabase.storage.getBucket(BUCKET_NAME);
+        if (error) {
+            if (error.message.includes("not found")) {
+                return false;
+            }
+            throw error;
+        }
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
  * Upload a file buffer to Supabase Storage.
  * Returns the storage path on success.
  */
@@ -25,6 +43,12 @@ export async function uploadToSupabase(
     fileName: string,
     mimeType: string
 ): Promise<string> {
+    // Check if bucket exists first
+    const bucketExists = await checkBucketExists();
+    if (!bucketExists) {
+        throw new Error(`Storage bucket '${BUCKET_NAME}' not found. Please create it in your Supabase project.`);
+    }
+
     const storagePath = `uploads/${Date.now()}-${fileName}`;
 
     const { error } = await supabase.storage
@@ -35,7 +59,16 @@ export async function uploadToSupabase(
         });
 
     if (error) {
-        throw new Error(`Supabase upload failed: ${error.message}`);
+        // Provide more specific error messages
+        if (error.message.includes("bucket") && error.message.includes("not found")) {
+            throw new Error(`Storage bucket '${BUCKET_NAME}' not found. Please create it in your Supabase project.`);
+        } else if (error.message.includes("permission") || error.message.includes("unauthorized")) {
+            throw new Error("Permission denied. Check your SUPABASE_SERVICE_ROLE_KEY and bucket policies.");
+        } else if (error.message.includes("quota") || error.message.includes("size")) {
+            throw new Error("File upload failed: storage quota exceeded or file too large.");
+        } else {
+            throw new Error(`Supabase upload failed: ${error.message}`);
+        }
     }
 
     return storagePath;
