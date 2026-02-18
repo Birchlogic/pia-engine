@@ -186,6 +186,9 @@ export default function VerticalWorkspacePage() {
     const [mermaidCode, setMermaidCode] = useState<string | null>(null);
     const [dfdLoading, setDfdLoading] = useState(false);
     const [generatingDfd, setGeneratingDfd] = useState(false);
+    const [dfdEditMode, setDfdEditMode] = useState(false);
+    const [dfdDraftCode, setDfdDraftCode] = useState<string>("");
+    const [savingDfd, setSavingDfd] = useState(false);
     const [downloadingFiles, setDownloadingFiles] = useState<Set<string>>(new Set());
     const mermaidRef = useRef<HTMLDivElement>(null);
     const [activeTab, setActiveTab] = useState("sessions");
@@ -276,8 +279,10 @@ export default function VerticalWorkspacePage() {
     // Render Mermaid diagram when tab becomes visible AND mermaidCode is available
     const [mermaidError, setMermaidError] = useState<string | null>(null);
 
+    const codeToRender = dfdEditMode ? dfdDraftCode : (mermaidCode || "");
+
     useEffect(() => {
-        if (activeTab !== "dfd" || !mermaidCode) return;
+        if (activeTab !== "dfd" || !codeToRender) return;
 
         // Small delay to ensure the tab content is mounted in the DOM
         const timer = setTimeout(async () => {
@@ -290,9 +295,12 @@ export default function VerticalWorkspacePage() {
                     startOnLoad: false,
                     theme: "default",
                     securityLevel: "loose",
+                    flowchart: {
+                        htmlLabels: true,
+                    },
                 });
                 const renderId = `dfd-${Date.now()}`;
-                const { svg } = await mermaid.render(renderId, mermaidCode);
+                const { svg } = await mermaid.render(renderId, codeToRender);
                 if (mermaidRef.current) {
                     mermaidRef.current.innerHTML = svg;
                 }
@@ -303,7 +311,38 @@ export default function VerticalWorkspacePage() {
         }, 100);
 
         return () => clearTimeout(timer);
-    }, [activeTab, mermaidCode]);
+    }, [activeTab, codeToRender]);
+
+    useEffect(() => {
+        if (!mermaidCode) return;
+        if (dfdEditMode) setDfdDraftCode(mermaidCode);
+    }, [dfdEditMode, mermaidCode]);
+
+    const handleSaveDfd = async () => {
+        if (!dfdDraftCode.trim()) {
+            toast.error("Mermaid code cannot be empty");
+            return;
+        }
+        setSavingDfd(true);
+        try {
+            const res = await fetch("/api/dfd", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ verticalId, mermaidCode: dfdDraftCode }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                toast.error(data?.error || "Failed to save DFD");
+                return;
+            }
+            toast.success("DFD saved");
+            setMermaidCode(dfdDraftCode);
+            setDfdEditMode(false);
+        } catch {
+            toast.error("Network error — failed to save DFD");
+        }
+        setSavingDfd(false);
+    };
 
     const handleCreateSession = async () => {
         if (!newForm.rawTextNotes.trim() && uploadFiles.length === 0) {
@@ -1553,17 +1592,73 @@ export default function VerticalWorkspacePage() {
                                         <CardTitle>Data Flow Diagram</CardTitle>
                                         <CardDescription>Mermaid-based DFD generated from Schema-1</CardDescription>
                                     </div>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={handleGenerateDfd}
-                                        disabled={generatingDfd}
-                                    >
-                                        {generatingDfd ? "Regenerating..." : "Regenerate"}
-                                    </Button>
+                                    <div className="flex items-center gap-2">
+                                        {dfdEditMode ? (
+                                            <>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => {
+                                                        setDfdDraftCode(mermaidCode || "");
+                                                        setDfdEditMode(false);
+                                                    }}
+                                                    disabled={savingDfd}
+                                                >
+                                                    Cancel
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    onClick={handleSaveDfd}
+                                                    disabled={savingDfd}
+                                                >
+                                                    {savingDfd ? "Saving..." : "Save"}
+                                                </Button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => setDfdEditMode(true)}
+                                                >
+                                                    Edit
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={handleGenerateDfd}
+                                                    disabled={generatingDfd}
+                                                >
+                                                    {generatingDfd ? "Regenerating..." : "Regenerate"}
+                                                </Button>
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                             </CardHeader>
                             <CardContent>
+                                {dfdEditMode && (
+                                    <div className="mb-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label>Mermaid code</Label>
+                                            <Textarea
+                                                value={dfdDraftCode}
+                                                onChange={(e) => setDfdDraftCode(e.target.value)}
+                                                rows={14}
+                                                className="font-mono text-xs"
+                                            />
+                                            <p className="text-xs text-muted-foreground">
+                                                Tip: icons use HTML labels with Font Awesome (e.g. <code>&lt;i class='fa-solid fa-database'&gt;&lt;/i&gt;</code>).
+                                            </p>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <p className="text-xs font-medium text-muted-foreground">Preview</p>
+                                            <div className="bg-white rounded-lg p-6 overflow-x-auto border" ref={mermaidRef}>
+                                                <p className="text-sm text-muted-foreground">Loading diagram...</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                                 {mermaidError ? (
                                     <div className="bg-red-50 dark:bg-red-950/20 rounded-lg p-6 border border-red-200 dark:border-red-800">
                                         <p className="text-sm text-red-600 dark:text-red-400 font-medium mb-2">Failed to render diagram</p>
@@ -1571,9 +1666,11 @@ export default function VerticalWorkspacePage() {
                                         <p className="text-xs text-muted-foreground">Click &quot;Regenerate&quot; to generate fresh Mermaid code.</p>
                                     </div>
                                 ) : (
-                                    <div className="bg-white rounded-lg p-6 overflow-x-auto border" ref={mermaidRef}>
-                                        <p className="text-sm text-muted-foreground">Loading diagram...</p>
-                                    </div>
+                                    !dfdEditMode && (
+                                        <div className="bg-white rounded-lg p-6 overflow-x-auto border" ref={mermaidRef}>
+                                            <p className="text-sm text-muted-foreground">Loading diagram...</p>
+                                        </div>
+                                    )
                                 )}
                                 {/* Raw Mermaid Code Toggle */}
                                 <details className="mt-4">
@@ -1581,7 +1678,7 @@ export default function VerticalWorkspacePage() {
                                         View raw Mermaid code
                                     </summary>
                                     <pre className="mt-2 bg-muted/50 rounded-lg p-4 text-xs font-mono overflow-x-auto">
-                                        {mermaidCode}
+                                        {dfdEditMode ? dfdDraftCode : mermaidCode}
                                     </pre>
                                 </details>
                             </CardContent>

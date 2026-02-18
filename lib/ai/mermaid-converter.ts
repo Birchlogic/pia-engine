@@ -70,6 +70,29 @@ function sanitizeLabel(label: string): string {
         .replace(/[<>]/g, "");
 }
 
+function escapeHtml(text: string): string {
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+function iconSvg(type: SchemaOneNode["type"]): string {
+    // Inline SVG so it renders inside Mermaid's SVG/foreignObject without relying on external fonts/CSS.
+    const common = "width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'";
+
+    if (type === "DATA_STORE") {
+        return `<svg ${common}><ellipse cx='12' cy='5' rx='9' ry='3'/><path d='M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5'/><path d='M3 12c0 1.7 4 3 9 3s9-1.3 9-3'/></svg>`;
+    }
+    if (type === "EXTERNAL_ENTITY") {
+        return `<svg ${common}><path d='M18 20a6 6 0 0 0-12 0'/><circle cx='12' cy='10' r='4'/></svg>`;
+    }
+    // PROCESS
+    return `<svg ${common}><path d='M12 15.5V20'/><path d='M7.5 12H4'/><path d='M20 12h-3.5'/><path d='M16.5 12a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0Z'/><path d='M12 4v3.5'/></svg>`;
+}
+
 export function generateMermaid(schema: SchemaOne): string {
     let mermaidCode = "graph TD\n";
 
@@ -94,15 +117,19 @@ export function generateMermaid(schema: SchemaOne): string {
                 node.type === "EXTERNAL_ENTITY" ? "entity" : "store"
         );
 
+        const iconHtml = `<span style='margin-right:8px;display:inline-flex;align-items:center;'>${iconSvg(node.type)}</span>`;
+        const labelHtml = `<span>${escapeHtml(label)}</span>`;
+        const html = `<span style='display:inline-flex;align-items:center;color:#111827;'>${iconHtml}${labelHtml}</span>`;
+
         switch (node.type) {
             case "PROCESS":
-                mermaidCode += `  ${node.id}("${label}"):::${styleClass}\n`;
+                mermaidCode += `  ${node.id}("${html}"):::${styleClass}\n`;
                 break;
             case "EXTERNAL_ENTITY":
-                mermaidCode += `  ${node.id}["${label}"]:::${styleClass}\n`;
+                mermaidCode += `  ${node.id}["${html}"]:::${styleClass}\n`;
                 break;
             case "DATA_STORE":
-                mermaidCode += `  ${node.id}[("${label}")]:::${styleClass}\n`;
+                mermaidCode += `  ${node.id}[("${html}")]:::${styleClass}\n`;
                 break;
         }
     };
