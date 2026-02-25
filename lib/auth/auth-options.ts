@@ -58,8 +58,8 @@ export const authOptions: NextAuthOptions = {
         async session({ session, token }) {
             console.log("[Auth] Session Callback - Token:", token.email);
             if (session.user) {
-                session.user.name = token.name;
-                session.user.email = token.email;
+                if (typeof token.name === "string") session.user.name = token.name;
+                if (typeof token.email === "string") session.user.email = token.email;
                 (session.user as { id: string }).id = token.id as string;
                 (session.user as { role: string }).role = token.role as string;
                 (session.user as { orgId: string | null }).orgId = token.orgId as string | null;

@@ -1,11 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/db/prisma";
 import { getCurrentUser, unauthorizedResponse } from "@/lib/auth/helpers";
-import { writeFile, mkdir } from "fs/promises";
-import { join } from "path";
-import { randomUUID } from "crypto";
-
-const UPLOAD_DIR = join(process.cwd(), "uploads");
+import { uploadToSupabase } from "@/lib/supabase/client";
 
 async function extractTextFromPdf(buffer: Buffer): Promise<string> {
     // pdf-parse doesn't have type declarations, use require
@@ -32,15 +28,20 @@ export async function POST(
         return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
+    // Early check for Supabase configuration
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        return NextResponse.json(
+            { error: "File upload is not configured. Please set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in your environment." },
+            { status: 500 }
+        );
+    }
+
     const formData = await request.formData();
     const files = formData.getAll("files") as File[];
 
     if (!files || files.length === 0) {
         return NextResponse.json({ error: "No files provided" }, { status: 400 });
     }
-
-    // Ensure upload directory exists
-    await mkdir(UPLOAD_DIR, { recursive: true });
 
     const savedFiles = [];
 
@@ -51,11 +52,19 @@ export async function POST(
         }
 
         const buffer = Buffer.from(await file.arrayBuffer());
-        const uniqueName = `${randomUUID()}.${ext}`;
-        const filePath = join(UPLOAD_DIR, uniqueName);
+        const mimeType = ext === "pdf" ? "application/pdf" : "text/plain";
 
-        // Save file to disk
-        await writeFile(filePath, buffer);
+        // Upload to Supabase Storage
+        let storagePath: string;
+        try {
+            storagePath = await uploadToSupabase(buffer, file.name, mimeType);
+        } catch (err) {
+            console.error(`Failed to upload ${file.name} to Supabase:`, err);
+            return NextResponse.json(
+                { error: `Failed to upload ${file.name}. Check Supabase configuration.` },
+                { status: 500 }
+            );
+        }
 
         // Extract text
         let transcribedText = "";
@@ -72,7 +81,6 @@ export async function POST(
 
         // Determine file type
         const fileType = ext === "pdf" ? "policy_doc" : "transcript_doc";
-        const mimeType = ext === "pdf" ? "application/pdf" : "text/plain";
 
         // Save to database
         const sessionFile = await prisma.sessionFile.create({
@@ -82,7 +90,7 @@ export async function POST(
                 fileType: fileType as "transcript_doc" | "policy_doc",
                 mimeType,
                 fileSizeBytes: BigInt(buffer.length),
-                storagePath: filePath,
+                storagePath,
                 transcriptionStatus: "completed",
                 transcribedText,
                 uploadedById: user.id,

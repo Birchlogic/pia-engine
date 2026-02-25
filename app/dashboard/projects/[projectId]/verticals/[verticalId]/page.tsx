@@ -186,6 +186,10 @@ export default function VerticalWorkspacePage() {
     const [mermaidCode, setMermaidCode] = useState<string | null>(null);
     const [dfdLoading, setDfdLoading] = useState(false);
     const [generatingDfd, setGeneratingDfd] = useState(false);
+    const [dfdEditMode, setDfdEditMode] = useState(false);
+    const [dfdDraftCode, setDfdDraftCode] = useState<string>("");
+    const [savingDfd, setSavingDfd] = useState(false);
+    const [downloadingFiles, setDownloadingFiles] = useState<Set<string>>(new Set());
     const mermaidRef = useRef<HTMLDivElement>(null);
     const [activeTab, setActiveTab] = useState("sessions");
 
@@ -198,6 +202,34 @@ export default function VerticalWorkspacePage() {
     const [schemaOne, setSchemaOne] = useState<SchemaOneFull | null>(null);
     const [schemaLoading, setSchemaLoading] = useState(false);
 
+    // Session filter sub-tabs
+    const [sessionFilter, setSessionFilter] = useState<"all" | "draft" | "finalized">("all");
+
+    // Rate-limit cooldown timer (60s vanilla timer)
+    const [cooldownSeconds, setCooldownSeconds] = useState(0);
+    const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    const startCooldown = useCallback(() => {
+        setCooldownSeconds(60);
+        if (cooldownRef.current) clearInterval(cooldownRef.current);
+        cooldownRef.current = setInterval(() => {
+            setCooldownSeconds((prev) => {
+                if (prev <= 1) {
+                    if (cooldownRef.current) clearInterval(cooldownRef.current);
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            if (cooldownRef.current) clearInterval(cooldownRef.current);
+        };
+    }, []);
+
+    const isCoolingDown = cooldownSeconds > 0;
 
     const fetchVertical = useCallback(async () => {
         const res = await fetch(`/api/verticals/${verticalId}`);
@@ -247,8 +279,10 @@ export default function VerticalWorkspacePage() {
     // Render Mermaid diagram when tab becomes visible AND mermaidCode is available
     const [mermaidError, setMermaidError] = useState<string | null>(null);
 
+    const codeToRender = dfdEditMode ? dfdDraftCode : (mermaidCode || "");
+
     useEffect(() => {
-        if (activeTab !== "dfd" || !mermaidCode) return;
+        if (activeTab !== "dfd" || !codeToRender) return;
 
         // Small delay to ensure the tab content is mounted in the DOM
         const timer = setTimeout(async () => {
@@ -261,9 +295,12 @@ export default function VerticalWorkspacePage() {
                     startOnLoad: false,
                     theme: "default",
                     securityLevel: "loose",
+                    flowchart: {
+                        htmlLabels: true,
+                    },
                 });
                 const renderId = `dfd-${Date.now()}`;
-                const { svg } = await mermaid.render(renderId, mermaidCode);
+                const { svg } = await mermaid.render(renderId, codeToRender);
                 if (mermaidRef.current) {
                     mermaidRef.current.innerHTML = svg;
                 }
@@ -274,7 +311,38 @@ export default function VerticalWorkspacePage() {
         }, 100);
 
         return () => clearTimeout(timer);
-    }, [activeTab, mermaidCode]);
+    }, [activeTab, codeToRender]);
+
+    useEffect(() => {
+        if (!mermaidCode) return;
+        if (dfdEditMode) setDfdDraftCode(mermaidCode);
+    }, [dfdEditMode, mermaidCode]);
+
+    const handleSaveDfd = async () => {
+        if (!dfdDraftCode.trim()) {
+            toast.error("Mermaid code cannot be empty");
+            return;
+        }
+        setSavingDfd(true);
+        try {
+            const res = await fetch("/api/dfd", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ verticalId, mermaidCode: dfdDraftCode }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                toast.error(data?.error || "Failed to save DFD");
+                return;
+            }
+            toast.success("DFD saved");
+            setMermaidCode(dfdDraftCode);
+            setDfdEditMode(false);
+        } catch {
+            toast.error("Network error — failed to save DFD");
+        }
+        setSavingDfd(false);
+    };
 
     const handleCreateSession = async () => {
         if (!newForm.rawTextNotes.trim() && uploadFiles.length === 0) {
@@ -411,7 +479,12 @@ export default function VerticalWorkspacePage() {
 
 
     const handleGenerateMatrix = async () => {
+        if (isCoolingDown) {
+            toast.warning(`Please wait ${cooldownSeconds}s before generating again`);
+            return;
+        }
         setGeneratingMatrix(true);
+        toast.loading("Generating Data Matrix — this may take 30-60 seconds...", { id: "matrix-gen" });
         try {
             const res = await fetch("/api/ai/generate-matrix", {
                 method: "POST",
@@ -420,21 +493,28 @@ export default function VerticalWorkspacePage() {
             });
             const data = await res.json();
             if (res.ok) {
-                toast.success(data.message || "Data Matrix generated!");
+                toast.success(data.message || "Data Matrix generated!", { id: "matrix-gen" });
                 fetchMatrixRows();
                 fetchSchemaOne();
                 fetchVertical();
+                startCooldown();
             } else {
-                toast.error(data.error || "Failed to generate Data Matrix");
+                const errMsg = data.error || "Failed to generate Data Matrix";
+                toast.error(errMsg.length > 200 ? errMsg.slice(0, 200) + "…" : errMsg, { id: "matrix-gen" });
             }
         } catch {
-            toast.error("Failed to generate Data Matrix");
+            toast.error("Network error — failed to generate Data Matrix", { id: "matrix-gen" });
         }
         setGeneratingMatrix(false);
     };
 
     const handleGenerateDfd = async () => {
+        if (isCoolingDown) {
+            toast.warning(`Please wait ${cooldownSeconds}s before generating again`);
+            return;
+        }
         setGeneratingDfd(true);
+        toast.loading("Generating DFD — this may take 20-40 seconds...", { id: "dfd-gen" });
         try {
             const res = await fetch("/api/ai/generate-dfd", {
                 method: "POST",
@@ -443,14 +523,16 @@ export default function VerticalWorkspacePage() {
             });
             const data = await res.json();
             if (res.ok) {
-                toast.success("Data Flow Diagram generated!");
+                toast.success("Data Flow Diagram generated!", { id: "dfd-gen" });
                 setMermaidCode(data.mermaidCode);
                 fetchVertical();
+                startCooldown();
             } else {
-                toast.error(data.error || "Failed to generate DFD");
+                const errMsg = data.error || "Failed to generate DFD";
+                toast.error(errMsg.length > 200 ? errMsg.slice(0, 200) + "…" : errMsg, { id: "dfd-gen" });
             }
         } catch {
-            toast.error("Failed to generate DFD");
+            toast.error("Network error — failed to generate DFD", { id: "dfd-gen" });
         }
         setGeneratingDfd(false);
     };
@@ -498,8 +580,17 @@ export default function VerticalWorkspacePage() {
     }
 
     const finalizedSessions = vertical.sessions.filter((s) => s.status === "finalized");
+    const draftSessions = vertical.sessions.filter((s) => s.status === "draft");
     const hasFinalizedSessions = finalizedSessions.length > 0;
     const hasDataMatrix = matrixRows.length > 0;
+    const totalFiles = vertical.sessions.reduce((sum, s) => sum + s._count.files, 0);
+    const allTags = new Set(vertical.sessions.flatMap((s) => s.assessmentCriteriaTags));
+    const criteriaCoverage = Math.round((allTags.size / allCriteria.length) * 100);
+
+    const filteredSessions =
+        sessionFilter === "all"
+            ? vertical.sessions
+            : vertical.sessions.filter((s) => s.status === sessionFilter);
 
     return (
         <div className="space-y-6">
@@ -550,19 +641,103 @@ export default function VerticalWorkspacePage() {
 
                 {/* ────────────── Sessions Tab ────────────── */}
                 <TabsContent value="sessions" className="space-y-4">
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-5 gap-3">
+                        <Card className="py-3">
+                            <CardContent className="px-4 py-0">
+                                <p className="text-xs text-muted-foreground">Total Sessions</p>
+                                <p className="text-2xl font-bold">{vertical.sessions.length}</p>
+                            </CardContent>
+                        </Card>
+                        <Card className="py-3">
+                            <CardContent className="px-4 py-0">
+                                <p className="text-xs text-muted-foreground">Finalized</p>
+                                <p className="text-2xl font-bold text-green-500">{finalizedSessions.length}</p>
+                            </CardContent>
+                        </Card>
+                        <Card className="py-3">
+                            <CardContent className="px-4 py-0">
+                                <p className="text-xs text-muted-foreground">Drafts</p>
+                                <p className="text-2xl font-bold text-yellow-500">{draftSessions.length}</p>
+                            </CardContent>
+                        </Card>
+                        <Card className="py-3">
+                            <CardContent className="px-4 py-0">
+                                <p className="text-xs text-muted-foreground">Files Uploaded</p>
+                                <p className="text-2xl font-bold">{totalFiles}</p>
+                            </CardContent>
+                        </Card>
+                        <Card className="py-3">
+                            <CardContent className="px-4 py-0">
+                                <p className="text-xs text-muted-foreground">Criteria Coverage</p>
+                                <div className="flex items-center gap-2">
+                                    <p className="text-2xl font-bold">{criteriaCoverage}%</p>
+                                    <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                                        <div
+                                            className={`h-full rounded-full transition-all ${criteriaCoverage >= 80 ? "bg-green-500" : criteriaCoverage >= 50 ? "bg-yellow-500" : "bg-red-500"}`}
+                                            style={{ width: `${criteriaCoverage}%` }}
+                                        />
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {/* Cooldown Banner */}
+                    {isCoolingDown && (
+                        <Card className="border-amber-500/30 bg-amber-500/5">
+                            <CardContent className="py-2 px-4 flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+                                    <span className="text-sm font-bold text-amber-500 tabular-nums">{cooldownSeconds}</span>
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                    AI generation cooldown — please wait {cooldownSeconds}s before triggering another generation.
+                                </p>
+                            </CardContent>
+                        </Card>
+                    )}
+
+                    {/* Generation Loading Overlay */}
+                    {generatingMatrix && (
+                        <Card className="border-primary/30 bg-primary/5">
+                            <CardContent className="py-4 px-4 flex items-center gap-4">
+                                <div className="w-10 h-10 rounded-full border-2 border-primary border-t-transparent animate-spin flex-shrink-0" />
+                                <div>
+                                    <p className="text-sm font-medium">Generating Data Matrix...</p>
+                                    <p className="text-xs text-muted-foreground">AI is analyzing your session transcripts. This may take 30-60 seconds.</p>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
+
+                    {/* Filter Sub-tabs + Actions */}
                     <div className="flex items-center justify-between">
-                        <p className="text-sm text-muted-foreground">
-                            {finalizedSessions.length} finalized, {vertical.sessions.length - finalizedSessions.length} drafts
-                        </p>
+                        <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                            {(["all", "finalized", "draft"] as const).map((filter) => (
+                                <button
+                                    key={filter}
+                                    onClick={() => setSessionFilter(filter)}
+                                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                                        sessionFilter === filter
+                                            ? "bg-background text-foreground shadow-sm"
+                                            : "text-muted-foreground hover:text-foreground"
+                                    }`}
+                                >
+                                    {filter === "all" ? `All (${vertical.sessions.length})` :
+                                     filter === "finalized" ? `Finalized (${finalizedSessions.length})` :
+                                     `Drafts (${draftSessions.length})`}
+                                </button>
+                            ))}
+                        </div>
 
                         <div className="flex items-center gap-2">
                             {/* Generate Data Matrix Button */}
                             {hasFinalizedSessions && (
                                 <Button
                                     onClick={handleGenerateMatrix}
-                                    disabled={generatingMatrix}
+                                    disabled={generatingMatrix || isCoolingDown}
                                 >
-                                    {generatingMatrix ? "Generating..." : "Generate Data Matrix"}
+                                    {generatingMatrix ? "Generating..." : isCoolingDown ? `Wait ${cooldownSeconds}s` : "Generate Data Matrix"}
                                 </Button>
                             )}
 
@@ -742,9 +917,17 @@ export default function VerticalWorkspacePage() {
                                 <Button onClick={() => setNewDialogOpen(true)}>Create Session</Button>
                             </CardContent>
                         </Card>
+                    ) : filteredSessions.length === 0 ? (
+                        <Card className="border-dashed">
+                            <CardContent className="flex flex-col items-center justify-center py-8">
+                                <p className="text-muted-foreground text-sm">
+                                    No {sessionFilter} sessions found.
+                                </p>
+                            </CardContent>
+                        </Card>
                     ) : (
                         <div className="space-y-3">
-                            {vertical.sessions.map((session) => (
+                            {filteredSessions.map((session) => (
                                 <Collapsible
                                     key={session.id}
                                     open={expandedSessions.has(session.id)}
@@ -889,6 +1072,93 @@ export default function VerticalWorkspacePage() {
                                                     <div className="mt-4 p-4 bg-primary/5 rounded-lg border border-primary/10">
                                                         <p className="text-xs font-medium text-primary mb-2">AI Summary</p>
                                                         <p className="text-sm">{session.aiSummary}</p>
+                                                    </div>
+                                                )}
+
+                                                {/* Files Section */}
+                                                {session.files && session.files.length > 0 && (
+                                                    <div className="mt-4">
+                                                        <p className="text-xs font-medium text-muted-foreground mb-2">Uploaded Files</p>
+                                                        <div className="space-y-2">
+                                                            {session.files.map((file) => (
+                                                                <div key={file.id} className="flex items-center justify-between bg-muted/30 rounded-lg p-3">
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center">
+                                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-primary">
+                                                                                <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                                                                            </svg>
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="text-sm font-medium">{file.fileName}</p>
+                                                                            <p className="text-xs text-muted-foreground">
+                                                                                {(Number(file.fileSizeBytes) / 1024 / 1024).toFixed(2)} MB
+                                                                            </p>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Button
+                                                                            variant="outline"
+                                                                            size="sm"
+                                                                            disabled={downloadingFiles.has(file.id)}
+                                                                            onClick={async () => {
+                                                setDownloadingFiles(prev => new Set(prev).add(file.id));
+                                                try {
+                                                    const response = await fetch(`/api/sessions/${session.id}/files/${file.id}`);
+                                                    const data = await response.json();
+                                                    if (response.ok) {
+                                                        // Fetch the file from the signed URL
+                                                        const fileResponse = await fetch(data.downloadUrl);
+                                                        if (fileResponse.ok) {
+                                                            const blob = await fileResponse.blob();
+                                                            const url = window.URL.createObjectURL(blob);
+                                                            const a = document.createElement('a');
+                                                            a.href = url;
+                                                            a.download = file.fileName;
+                                                            document.body.appendChild(a);
+                                                            a.click();
+                                                            document.body.removeChild(a);
+                                                            window.URL.revokeObjectURL(url);
+                                                            toast.success(`Downloaded ${file.fileName}`);
+                                                        } else {
+                                                            toast.error('Failed to download file');
+                                                        }
+                                                    } else {
+                                                        toast.error(data.error || 'Failed to get download URL');
+                                                    }
+                                                } catch {
+                                                    toast.error('Failed to download file');
+                                                } finally {
+                                                    setDownloadingFiles(prev => {
+                                                        const newSet = new Set(prev);
+                                                        newSet.delete(file.id);
+                                                        return newSet;
+                                                    });
+                                                }
+                                            }}
+                                                                        >
+                                                                            {downloadingFiles.has(file.id) ? (
+                                                                                <>
+                                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 mr-1 animate-spin">
+                                                                                        <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                                                        <path d="M9 12l2 2 4-4" />
+                                                                                    </svg>
+                                                                                    Downloading...
+                                                                                </>
+                                                                            ) : (
+                                                                                <>
+                                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 mr-1">
+                                                                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                                                                        <polyline points="7 10 12 15 17 10" />
+                                                                                        <line x1="12" x2="12" y1="15" y2="3" />
+                                                                                    </svg>
+                                                                                    Download
+                                                                                </>
+                                                                            )}
+                                                                        </Button>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
                                                     </div>
                                                 )}
                                             </CardContent>
@@ -1322,17 +1592,73 @@ export default function VerticalWorkspacePage() {
                                         <CardTitle>Data Flow Diagram</CardTitle>
                                         <CardDescription>Mermaid-based DFD generated from Schema-1</CardDescription>
                                     </div>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={handleGenerateDfd}
-                                        disabled={generatingDfd}
-                                    >
-                                        {generatingDfd ? "Regenerating..." : "Regenerate"}
-                                    </Button>
+                                    <div className="flex items-center gap-2">
+                                        {dfdEditMode ? (
+                                            <>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => {
+                                                        setDfdDraftCode(mermaidCode || "");
+                                                        setDfdEditMode(false);
+                                                    }}
+                                                    disabled={savingDfd}
+                                                >
+                                                    Cancel
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    onClick={handleSaveDfd}
+                                                    disabled={savingDfd}
+                                                >
+                                                    {savingDfd ? "Saving..." : "Save"}
+                                                </Button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => setDfdEditMode(true)}
+                                                >
+                                                    Edit
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={handleGenerateDfd}
+                                                    disabled={generatingDfd}
+                                                >
+                                                    {generatingDfd ? "Regenerating..." : "Regenerate"}
+                                                </Button>
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                             </CardHeader>
                             <CardContent>
+                                {dfdEditMode && (
+                                    <div className="mb-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label>Mermaid code</Label>
+                                            <Textarea
+                                                value={dfdDraftCode}
+                                                onChange={(e) => setDfdDraftCode(e.target.value)}
+                                                rows={14}
+                                                className="font-mono text-xs"
+                                            />
+                                            <p className="text-xs text-muted-foreground">
+                                                Tip: icons use HTML labels with Font Awesome (e.g. <code>&lt;i class='fa-solid fa-database'&gt;&lt;/i&gt;</code>).
+                                            </p>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <p className="text-xs font-medium text-muted-foreground">Preview</p>
+                                            <div className="bg-white rounded-lg p-6 overflow-x-auto border" ref={mermaidRef}>
+                                                <p className="text-sm text-muted-foreground">Loading diagram...</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                                 {mermaidError ? (
                                     <div className="bg-red-50 dark:bg-red-950/20 rounded-lg p-6 border border-red-200 dark:border-red-800">
                                         <p className="text-sm text-red-600 dark:text-red-400 font-medium mb-2">Failed to render diagram</p>
@@ -1340,9 +1666,11 @@ export default function VerticalWorkspacePage() {
                                         <p className="text-xs text-muted-foreground">Click &quot;Regenerate&quot; to generate fresh Mermaid code.</p>
                                     </div>
                                 ) : (
-                                    <div className="bg-white rounded-lg p-6 overflow-x-auto border" ref={mermaidRef}>
-                                        <p className="text-sm text-muted-foreground">Loading diagram...</p>
-                                    </div>
+                                    !dfdEditMode && (
+                                        <div className="bg-white rounded-lg p-6 overflow-x-auto border" ref={mermaidRef}>
+                                            <p className="text-sm text-muted-foreground">Loading diagram...</p>
+                                        </div>
+                                    )
                                 )}
                                 {/* Raw Mermaid Code Toggle */}
                                 <details className="mt-4">
@@ -1350,7 +1678,7 @@ export default function VerticalWorkspacePage() {
                                         View raw Mermaid code
                                     </summary>
                                     <pre className="mt-2 bg-muted/50 rounded-lg p-4 text-xs font-mono overflow-x-auto">
-                                        {mermaidCode}
+                                        {dfdEditMode ? dfdDraftCode : mermaidCode}
                                     </pre>
                                 </details>
                             </CardContent>

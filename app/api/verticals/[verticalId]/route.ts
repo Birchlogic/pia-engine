@@ -11,29 +11,57 @@ export async function GET(
 
     const { verticalId } = await params;
 
-    const vertical = await prisma.vertical.findUnique({
-        where: { id: verticalId },
-        include: {
-            project: {
-                select: { id: true, name: true, organization: { select: { id: true, name: true } } },
-            },
-            sessions: {
-                orderBy: { sessionDate: "desc" },
-                include: {
-                    _count: { select: { files: true } },
-                    creator: { select: { name: true } },
+    try {
+        const vertical = await prisma.vertical.findUnique({
+            where: { id: verticalId },
+            include: {
+                project: {
+                    select: { id: true, name: true, organization: { select: { id: true, name: true } } },
                 },
+                sessions: {
+                    orderBy: { sessionDate: "desc" },
+                    include: {
+                        files: {
+                            select: {
+                                id: true,
+                                fileName: true,
+                                fileSizeBytes: true,
+                                fileType: true,
+                                mimeType: true,
+                                transcriptionStatus: true,
+                                createdAt: true,
+                            },
+                            orderBy: { createdAt: "desc" },
+                        },
+                        _count: { select: { files: true } },
+                        creator: { select: { name: true } },
+                    },
+                },
+                dataMatrix: true,
+                _count: { select: { sessions: true, dataMappingRows: true } },
             },
-            dataMatrix: true,
-            _count: { select: { sessions: true, dataMappingRows: true } },
-        },
-    });
+        });
 
-    if (!vertical) {
-        return NextResponse.json({ error: "Vertical not found" }, { status: 404 });
+        if (!vertical) {
+            console.error(`Vertical not found: ${verticalId}`);
+            return NextResponse.json({ error: "Vertical not found" }, { status: 404 });
+        }
+
+        // Handle BigInt serialization
+        const serializedVertical = JSON.parse(
+            JSON.stringify(vertical, (key, value) =>
+                typeof value === 'bigint' ? value.toString() : value
+            )
+        );
+
+        return NextResponse.json(serializedVertical);
+    } catch (error) {
+        console.error("Error fetching vertical:", error);
+        return NextResponse.json(
+            { error: "Internal server error", details: error instanceof Error ? error.message : "Unknown error" },
+            { status: 500 }
+        );
     }
-
-    return NextResponse.json(vertical);
 }
 
 export async function PUT(

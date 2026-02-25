@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {
+const nextConfig = {
   /* config options here */
   typescript: {
     // !! WARN !!
@@ -14,6 +14,6 @@ const nextConfig: NextConfig = {
     // your project has ESLint errors.
     ignoreDuringBuilds: true,
   },
-};
+} as NextConfig;
 
 export default nextConfig;
