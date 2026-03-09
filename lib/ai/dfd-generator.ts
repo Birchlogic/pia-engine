@@ -28,11 +28,14 @@ export async function generateDFD(options: GenerateDFDOptions) {
 
     const dataMatrix = await prisma.dataMatrix.findUnique({
         where: { verticalId },
-        select: { schemaOneJson: true },
+        select: { schemaOneJson: true, vertical: { select: { projectId: true } } },
     });
 
     if (!dataMatrix?.schemaOneJson) {
         throw new Error("No Schema-1 found. Generate the Data Matrix first.");
+    }
+    if (!dataMatrix.vertical?.projectId) {
+        throw new Error("Vertical or projectId not found.");
     }
 
     emit("generating_mermaid", "Generating Mermaid diagram...", 40);
@@ -42,7 +45,7 @@ export async function generateDFD(options: GenerateDFDOptions) {
     emit("persisting", "Saving DFD...", 75);
     const dfdGraph = await prisma.dfdGraph.upsert({
         where: { verticalId },
-        create: { verticalId, mermaidCode },
+        create: { verticalId, mermaidCode, project_id: dataMatrix.vertical.projectId },
         update: { mermaidCode },
     });
 

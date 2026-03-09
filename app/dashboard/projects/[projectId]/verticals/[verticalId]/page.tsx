@@ -25,8 +25,10 @@ import {
 } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DfdHtmlRenderer, type DfdData } from "@/components/dfd/DfdHtmlRenderer";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { Activity } from "lucide-react";
 
 type SessionFile = {
     id: string;
@@ -88,17 +90,17 @@ type SchemaIntegration = {
     direction?: string;
 };
 
-type SchemaNode = {
+interface SchemaNode {
     id: string;
     type: "EXTERNAL_ENTITY" | "PROCESS" | "DATA_STORE";
-    label: string;
-    description?: string;
+    name: string;
+    description: string;
     data_elements?: SchemaDataElement[];
-    sub_processes?: SchemaSubProcess[];
-    sla?: string;
-    integrations?: SchemaIntegration[];
+    sub_processes?: any[];  // More specific typing can be added later
+    integrations?: any[];
     reference_documents?: string[];
-};
+    sla?: string;
+}
 
 type SchemaFlow = {
     id: string;
@@ -177,26 +179,29 @@ export default function VerticalWorkspacePage() {
     // Expanded sessions
     const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
 
-    // Data Matrix
+    // Data Matrix (populated from Docker pipeline results)
     const [matrixRows, setMatrixRows] = useState<DataMappingRow[]>([]);
     const [matrixLoading, setMatrixLoading] = useState(false);
-    const [generatingMatrix, setGeneratingMatrix] = useState(false);
 
-    // DFD
-    const [mermaidCode, setMermaidCode] = useState<string | null>(null);
-    const [dfdLoading, setDfdLoading] = useState(false);
-    const [generatingDfd, setGeneratingDfd] = useState(false);
-    const [dfdEditMode, setDfdEditMode] = useState(false);
-    const [dfdDraftCode, setDfdDraftCode] = useState<string>("");
-    const [savingDfd, setSavingDfd] = useState(false);
+    // DFD (populated from Docker pipeline results)
+    const [dfdData, setDfdData] = useState<DfdData | null>(null);
+    const [dfdHtml, setDfdHtml] = useState<string | null>(null);
+    const [dfdLoading, setDfdLoading] = useState(true);
     const [downloadingFiles, setDownloadingFiles] = useState<Set<string>>(new Set());
-    const mermaidRef = useRef<HTMLDivElement>(null);
     const [activeTab, setActiveTab] = useState("sessions");
 
     // Delete Session
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
     const [deletingSession, setDeletingSession] = useState(false);
+
+    // Unified Pipeline Status
+    const [pipelineStatus, setPipelineStatus] = useState<string>("not_started");
+    const [generatingPipeline, setGeneratingPipeline] = useState(false);
+
+    // Mode Selection Modal
+    const [modeModalOpen, setModeModalOpen] = useState(false);
+    const [selectedMode, setSelectedMode] = useState<"rlm" | "aggressive" | "normal">("aggressive");
 
     // Source of Truth (Schema-1)
     const [schemaOne, setSchemaOne] = useState<SchemaOneFull | null>(null);
@@ -237,112 +242,94 @@ export default function VerticalWorkspacePage() {
         setLoading(false);
     }, [verticalId]);
 
-    const fetchMatrixRows = useCallback(async () => {
+    // Fetch all results from the unified Docker pipeline API
+    const fetchPipelineResults = useCallback(async () => {
         setMatrixLoading(true);
-        const res = await fetch(`/api/matrix?verticalId=${verticalId}`);
-        if (res.ok) {
-            const data = await res.json();
-            setMatrixRows(data.rows || []);
+        setDfdLoading(true);
+        setSchemaLoading(true); // Set schema loading to true here
+        try {
+            const res = await fetch(`/api/verticals/${verticalId}/pipeline/results`);
+            if (res.ok) {
+                const data = await res.json();
+                // Data mapping rows
+                if (data.data_mapping_rows && Array.isArray(data.data_mapping_rows)) {
+                    setMatrixRows(data.data_mapping_rows.map((row: any, idx: number) => ({
+                        id: row.id || `row-${idx}`,
+                        sNo: row.s_no ?? idx + 1,
+                        dataCategory: row.data_category || "",
+                        description: row.description || "",
+                        purpose: row.purpose || "",
+                        dataOwner: row.data_owner || "",
+                        storageLocation: row.storage_location || "",
+                        dataClassification: row.data_classification || "",
+                        retentionPeriod: row.retention_period || "",
+                        legalBasis: row.legal_basis || "",
+                    })));
+                }
+                // DFD JSON
+                // DFD JSON & HTML
+                if (data.dfd_json) {
+                    setDfdData(data.dfd_json);
+                }
+                if (data.interactive_html) {
+                    setDfdHtml(data.interactive_html);
+                }
+                // Schema-1
+                if (data.schema_one_json) {
+                    setSchemaOne(data.schema_one_json);
+                }
+                setPipelineStatus("completed");
+            }
+            // 404 means results not ready — that's fine
+        } catch (err) {
+            console.error("Error fetching pipeline results:", err);
         }
         setMatrixLoading(false);
-    }, [verticalId]);
-
-    const fetchDfd = useCallback(async () => {
-        setDfdLoading(true);
-        const res = await fetch(`/api/dfd?verticalId=${verticalId}`);
-        if (res.ok) {
-            const data = await res.json();
-            setMermaidCode(data.mermaidCode || null);
-        }
         setDfdLoading(false);
-    }, [verticalId]);
-
-    const fetchSchemaOne = useCallback(async () => {
-        setSchemaLoading(true);
-        const res = await fetch(`/api/key-processes?verticalId=${verticalId}`);
-        if (res.ok) {
-            const data = await res.json();
-            if (data.nodes?.length > 0) {
-                setSchemaOne(data);
-            }
-        }
-        setSchemaLoading(false);
+        setSchemaLoading(false); // Set schema loading to false here, regardless of success or failure
     }, [verticalId]);
 
     useEffect(() => {
         fetchVertical();
-        fetchMatrixRows();
-        fetchDfd();
-        fetchSchemaOne();
-    }, [fetchVertical, fetchMatrixRows, fetchDfd, fetchSchemaOne]);
+        fetchPipelineResults();
+    }, [fetchVertical, fetchPipelineResults]);
 
-    // Render Mermaid diagram when tab becomes visible AND mermaidCode is available
-    const [mermaidError, setMermaidError] = useState<string | null>(null);
-
-    const codeToRender = dfdEditMode ? dfdDraftCode : (mermaidCode || "");
-
+    // Unified pipeline polling
     useEffect(() => {
-        if (activeTab !== "dfd" || !codeToRender) return;
+        if (!generatingPipeline) return;
 
-        // Small delay to ensure the tab content is mounted in the DOM
-        const timer = setTimeout(async () => {
-            if (!mermaidRef.current) return;
-
+        let mounted = true;
+        const intervalId = setInterval(async () => {
             try {
-                setMermaidError(null);
-                const mermaid = (await import("mermaid")).default;
-                mermaid.initialize({
-                    startOnLoad: false,
-                    theme: "default",
-                    securityLevel: "loose",
-                    flowchart: {
-                        htmlLabels: true,
-                    },
-                });
-                const renderId = `dfd-${Date.now()}`;
-                const { svg } = await mermaid.render(renderId, codeToRender);
-                if (mermaidRef.current) {
-                    mermaidRef.current.innerHTML = svg;
+                const res = await fetch(`/api/verticals/${verticalId}/pipeline/status`);
+                if (res.ok && mounted) {
+                    const data = await res.json();
+                    const status = data.status || "not_started";
+
+                    if (status !== pipelineStatus) {
+                        setPipelineStatus(status);
+                    }
+
+                    if (status === "completed") {
+                        toast.success("Pipeline completed! Fetching results...");
+                        setGeneratingPipeline(false);
+                        fetchPipelineResults();
+                        fetchVertical();
+                    } else if (status === "failed") {
+                        toast.error(data.error_message || "Pipeline failed.");
+                        setGeneratingPipeline(false);
+                    }
                 }
-            } catch (err) {
-                console.error("Mermaid render error:", err);
-                setMermaidError(err instanceof Error ? err.message : "Failed to render diagram");
+            } catch (e) {
+                // silently ignore network errors during polling
             }
-        }, 100);
+        }, 5000);
 
-        return () => clearTimeout(timer);
-    }, [activeTab, codeToRender]);
-
-    useEffect(() => {
-        if (!mermaidCode) return;
-        if (dfdEditMode) setDfdDraftCode(mermaidCode);
-    }, [dfdEditMode, mermaidCode]);
-
-    const handleSaveDfd = async () => {
-        if (!dfdDraftCode.trim()) {
-            toast.error("Mermaid code cannot be empty");
-            return;
-        }
-        setSavingDfd(true);
-        try {
-            const res = await fetch("/api/dfd", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ verticalId, mermaidCode: dfdDraftCode }),
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                toast.error(data?.error || "Failed to save DFD");
-                return;
-            }
-            toast.success("DFD saved");
-            setMermaidCode(dfdDraftCode);
-            setDfdEditMode(false);
-        } catch {
-            toast.error("Network error — failed to save DFD");
-        }
-        setSavingDfd(false);
-    };
+        return () => {
+            mounted = false;
+            clearInterval(intervalId);
+        };
+    }, [generatingPipeline, pipelineStatus, verticalId, fetchPipelineResults, fetchVertical]);
 
     const handleCreateSession = async () => {
         if (!newForm.rawTextNotes.trim() && uploadFiles.length === 0) {
@@ -450,6 +437,9 @@ export default function VerticalWorkspacePage() {
 
         setDeletingSession(true);
         try {
+            // Clean up Docker background records silently
+            await fetch(`/api/sessions/${sessionToDelete}/dfd`, { method: "DELETE" }).catch(console.error);
+
             const res = await fetch(`/api/sessions/${sessionToDelete}`, {
                 method: "DELETE",
             });
@@ -465,6 +455,7 @@ export default function VerticalWorkspacePage() {
                 toast.success("Session deleted successfully");
                 setDeleteDialogOpen(false);
                 setSessionToDelete(null);
+                setDeletingSession(false);
             } else {
                 const data = await res.json();
                 toast.error(data.error || "Failed to delete session");
@@ -478,64 +469,53 @@ export default function VerticalWorkspacePage() {
 
 
 
-    const handleGenerateMatrix = async () => {
+    const handleGenerateMatrix = () => {
         if (isCoolingDown) {
             toast.warning(`Please wait ${cooldownSeconds}s before generating again`);
             return;
         }
-        setGeneratingMatrix(true);
-        toast.loading("Generating Data Matrix — this may take 30-60 seconds...", { id: "matrix-gen" });
-        try {
-            const res = await fetch("/api/ai/generate-matrix", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ verticalId }),
-            });
-            const data = await res.json();
-            if (res.ok) {
-                toast.success(data.message || "Data Matrix generated!", { id: "matrix-gen" });
-                fetchMatrixRows();
-                fetchSchemaOne();
-                fetchVertical();
-                startCooldown();
-            } else {
-                const errMsg = data.error || "Failed to generate Data Matrix";
-                toast.error(errMsg.length > 200 ? errMsg.slice(0, 200) + "…" : errMsg, { id: "matrix-gen" });
-            }
-        } catch {
-            toast.error("Network error — failed to generate Data Matrix", { id: "matrix-gen" });
-        }
-        setGeneratingMatrix(false);
+        setModeModalOpen(true);
     };
 
-    const handleGenerateDfd = async () => {
-        if (isCoolingDown) {
-            toast.warning(`Please wait ${cooldownSeconds}s before generating again`);
-            return;
-        }
-        setGeneratingDfd(true);
-        toast.loading("Generating DFD — this may take 20-40 seconds...", { id: "dfd-gen" });
+    const confirmGenerateMatrix = async () => {
+        setModeModalOpen(false);
+        setGeneratingPipeline(true);
+        setPipelineStatus("processing");
+        const toastId = toast.loading("Preparing to generate new Data Matrix...", { id: "matrix-gen" });
         try {
-            const res = await fetch("/api/ai/generate-dfd", {
+            // First clear out the previous matrices
+            await fetch(`/api/verticals/${verticalId}/pipeline`, {
+                method: "DELETE"
+            });
+            
+            toast.loading("Initiating unified pipeline in background...", { id: toastId });
+            
+            const payload = {
+                use_rlm: selectedMode === "rlm",
+                processing_mode: selectedMode === "aggressive" ? "aggressive_processing" : selectedMode === "normal" ? "standard_processing" : null
+            };
+            const res = await fetch(`/api/verticals/${verticalId}/pipeline/initiate`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ verticalId }),
+                body: JSON.stringify(payload)
             });
             const data = await res.json();
             if (res.ok) {
-                toast.success("Data Flow Diagram generated!", { id: "dfd-gen" });
-                setMermaidCode(data.mermaidCode);
-                fetchVertical();
+                toast.success(data.message || "Pipeline started!", { id: toastId });
                 startCooldown();
             } else {
-                const errMsg = data.error || "Failed to generate DFD";
-                toast.error(errMsg.length > 200 ? errMsg.slice(0, 200) + "…" : errMsg, { id: "dfd-gen" });
+                toast.error(data.error || "Failed to start pipeline", { id: toastId });
+                setGeneratingPipeline(false);
+                setPipelineStatus("not_started");
             }
         } catch {
-            toast.error("Network error — failed to generate DFD", { id: "dfd-gen" });
+            toast.error("Network error — failed to start pipeline", { id: toastId });
+            setGeneratingPipeline(false);
+            setPipelineStatus("not_started");
         }
-        setGeneratingDfd(false);
     };
+
+
 
     const toggleExpanded = (id: string) => {
         setExpandedSessions((prev) => {
@@ -593,7 +573,7 @@ export default function VerticalWorkspacePage() {
             : vertical.sessions.filter((s) => s.status === sessionFilter);
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 min-w-0 overflow-hidden">
             {/* Breadcrumb */}
             <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
                 <Link href="/dashboard/orgs" className="hover:text-foreground transition-colors">
@@ -634,7 +614,7 @@ export default function VerticalWorkspacePage() {
                 <TabsList>
                     <TabsTrigger value="sessions">Sessions ({vertical.sessions.length})</TabsTrigger>
                     <TabsTrigger value="matrix">Data Matrix</TabsTrigger>
-                    <TabsTrigger value="schema">Source of Truth</TabsTrigger>
+
                     <TabsTrigger value="dfd">DFD</TabsTrigger>
 
                 </TabsList>
@@ -698,7 +678,7 @@ export default function VerticalWorkspacePage() {
                     )}
 
                     {/* Generation Loading Overlay */}
-                    {generatingMatrix && (
+                    {generatingPipeline && (
                         <Card className="border-primary/30 bg-primary/5">
                             <CardContent className="py-4 px-4 flex items-center gap-4">
                                 <div className="w-10 h-10 rounded-full border-2 border-primary border-t-transparent animate-spin flex-shrink-0" />
@@ -717,15 +697,14 @@ export default function VerticalWorkspacePage() {
                                 <button
                                     key={filter}
                                     onClick={() => setSessionFilter(filter)}
-                                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                                        sessionFilter === filter
-                                            ? "bg-background text-foreground shadow-sm"
-                                            : "text-muted-foreground hover:text-foreground"
-                                    }`}
+                                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${sessionFilter === filter
+                                        ? "bg-background text-foreground shadow-sm"
+                                        : "text-muted-foreground hover:text-foreground"
+                                        }`}
                                 >
                                     {filter === "all" ? `All (${vertical.sessions.length})` :
-                                     filter === "finalized" ? `Finalized (${finalizedSessions.length})` :
-                                     `Drafts (${draftSessions.length})`}
+                                        filter === "finalized" ? `Finalized (${finalizedSessions.length})` :
+                                            `Drafts (${draftSessions.length})`}
                                 </button>
                             ))}
                         </div>
@@ -735,9 +714,9 @@ export default function VerticalWorkspacePage() {
                             {hasFinalizedSessions && (
                                 <Button
                                     onClick={handleGenerateMatrix}
-                                    disabled={generatingMatrix || isCoolingDown}
+                                    disabled={generatingPipeline || isCoolingDown}
                                 >
-                                    {generatingMatrix ? "Generating..." : isCoolingDown ? `Wait ${cooldownSeconds}s` : "Generate Data Matrix"}
+                                    {generatingPipeline ? "Generating..." : isCoolingDown ? `Wait ${cooldownSeconds}s` : "Generate Data Matrix"}
                                 </Button>
                             )}
 
@@ -988,6 +967,7 @@ export default function VerticalWorkspacePage() {
                                                         onClick={(e) => {
                                                             e.stopPropagation();
                                                             setSessionToDelete(session.id);
+                                                            setDeletingSession(false);
                                                             setDeleteDialogOpen(true);
                                                         }}
                                                     >
@@ -1101,40 +1081,40 @@ export default function VerticalWorkspacePage() {
                                                                             size="sm"
                                                                             disabled={downloadingFiles.has(file.id)}
                                                                             onClick={async () => {
-                                                setDownloadingFiles(prev => new Set(prev).add(file.id));
-                                                try {
-                                                    const response = await fetch(`/api/sessions/${session.id}/files/${file.id}`);
-                                                    const data = await response.json();
-                                                    if (response.ok) {
-                                                        // Fetch the file from the signed URL
-                                                        const fileResponse = await fetch(data.downloadUrl);
-                                                        if (fileResponse.ok) {
-                                                            const blob = await fileResponse.blob();
-                                                            const url = window.URL.createObjectURL(blob);
-                                                            const a = document.createElement('a');
-                                                            a.href = url;
-                                                            a.download = file.fileName;
-                                                            document.body.appendChild(a);
-                                                            a.click();
-                                                            document.body.removeChild(a);
-                                                            window.URL.revokeObjectURL(url);
-                                                            toast.success(`Downloaded ${file.fileName}`);
-                                                        } else {
-                                                            toast.error('Failed to download file');
-                                                        }
-                                                    } else {
-                                                        toast.error(data.error || 'Failed to get download URL');
-                                                    }
-                                                } catch {
-                                                    toast.error('Failed to download file');
-                                                } finally {
-                                                    setDownloadingFiles(prev => {
-                                                        const newSet = new Set(prev);
-                                                        newSet.delete(file.id);
-                                                        return newSet;
-                                                    });
-                                                }
-                                            }}
+                                                                                setDownloadingFiles(prev => new Set(prev).add(file.id));
+                                                                                try {
+                                                                                    const response = await fetch(`/api/sessions/${session.id}/files/${file.id}`);
+                                                                                    const data = await response.json();
+                                                                                    if (response.ok) {
+                                                                                        // Fetch the file from the signed URL
+                                                                                        const fileResponse = await fetch(data.downloadUrl);
+                                                                                        if (fileResponse.ok) {
+                                                                                            const blob = await fileResponse.blob();
+                                                                                            const url = window.URL.createObjectURL(blob);
+                                                                                            const a = document.createElement('a');
+                                                                                            a.href = url;
+                                                                                            a.download = file.fileName;
+                                                                                            document.body.appendChild(a);
+                                                                                            a.click();
+                                                                                            document.body.removeChild(a);
+                                                                                            window.URL.revokeObjectURL(url);
+                                                                                            toast.success(`Downloaded ${file.fileName}`);
+                                                                                        } else {
+                                                                                            toast.error('Failed to download file');
+                                                                                        }
+                                                                                    } else {
+                                                                                        toast.error(data.error || 'Failed to get download URL');
+                                                                                    }
+                                                                                } catch {
+                                                                                    toast.error('Failed to download file');
+                                                                                } finally {
+                                                                                    setDownloadingFiles(prev => {
+                                                                                        const newSet = new Set(prev);
+                                                                                        newSet.delete(file.id);
+                                                                                        return newSet;
+                                                                                    });
+                                                                                }
+                                                                            }}
                                                                         >
                                                                             {downloadingFiles.has(file.id) ? (
                                                                                 <>
@@ -1166,12 +1146,13 @@ export default function VerticalWorkspacePage() {
                                     </Card>
                                 </Collapsible>
                             ))}
+
                         </div>
                     )}
                 </TabsContent>
 
-                {/* ────────────── Data Matrix Tab ────────────── */}
-                <TabsContent value="matrix" className="space-y-4">
+                {/* ────────────── Data Matrix & Schema Tab ────────────── */}
+                <TabsContent value="matrix" className="space-y-8 min-w-0">
                     {matrixLoading ? (
                         <div className="space-y-3">
                             <Skeleton className="h-10 w-full" />
@@ -1183,22 +1164,20 @@ export default function VerticalWorkspacePage() {
                             <CardHeader>
                                 <div className="flex items-center justify-between">
                                     <div>
-                                        <CardTitle>Data Mapping & Inventory</CardTitle>
+                                        <CardTitle className="text-xl">1. Data Mapping & Inventory Rows</CardTitle>
                                         <CardDescription>{matrixRows.length} data categories identified</CardDescription>
                                     </div>
                                     <Button
-                                        variant="outline"
-                                        size="sm"
                                         onClick={handleGenerateMatrix}
-                                        disabled={generatingMatrix}
+                                        disabled={generatingPipeline}
                                     >
-                                        {generatingMatrix ? "Regenerating..." : "Regenerate"}
+                                        {generatingPipeline ? "Generating..." : "Generate Matrix & Schema"}
                                     </Button>
                                 </div>
                             </CardHeader>
                             <CardContent>
-                                <div className="overflow-x-auto rounded-lg border">
-                                    <table className="w-full text-sm">
+                                <div className="overflow-x-auto rounded-lg border max-w-full">
+                                    <table className="w-full min-w-max text-sm">
                                         <thead>
                                             <tr className="bg-muted/50">
                                                 <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">S.No</th>
@@ -1216,11 +1195,11 @@ export default function VerticalWorkspacePage() {
                                             {matrixRows.map((row, idx) => (
                                                 <tr key={row.id} className={idx % 2 === 0 ? "bg-background" : "bg-muted/20"}>
                                                     <td className="px-4 py-3 font-medium">{row.sNo}</td>
-                                                    <td className="px-4 py-3 font-medium whitespace-nowrap">{row.dataCategory}</td>
-                                                    <td className="px-4 py-3 max-w-[200px]">{row.description}</td>
-                                                    <td className="px-4 py-3 max-w-[180px]">{row.purpose}</td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">{row.dataOwner}</td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">{row.storageLocation}</td>
+                                                    <td className="px-4 py-3 font-medium">{row.dataCategory}</td>
+                                                    <td className="px-4 py-3 break-words">{row.description}</td>
+                                                    <td className="px-4 py-3 break-words">{row.purpose}</td>
+                                                    <td className="px-4 py-3">{row.dataOwner}</td>
+                                                    <td className="px-4 py-3">{row.storageLocation}</td>
                                                     <td className="px-4 py-3">
                                                         <Badge variant={
                                                             row.dataClassification.toLowerCase().includes("pii") || row.dataClassification.toLowerCase().includes("sensitive")
@@ -1232,8 +1211,8 @@ export default function VerticalWorkspacePage() {
                                                             {row.dataClassification}
                                                         </Badge>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">{row.retentionPeriod}</td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">{row.legalBasis}</td>
+                                                    <td className="px-4 py-3">{row.retentionPeriod}</td>
+                                                    <td className="px-4 py-3">{row.legalBasis}</td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -1262,459 +1241,363 @@ export default function VerticalWorkspacePage() {
                             </CardContent>
                         </Card>
                     )}
-                </TabsContent>
 
-                {/* ────────────── DFD Tab ────────────── */}
+                    {/* ────────────── Schema Content ────────────── */}
+                    <div className="pt-8 border-t">
+                        <h2 className="text-xl font-bold mb-6">2. Schema-1 Data Model Graph</h2>
+                        {schemaLoading ? (
+                            <div className="flex items-center justify-center py-12">
+                                <p className="text-muted-foreground">Loading Schema-1 data...</p>
+                            </div>
+                        ) : !schemaOne || !schemaOne.nodes || schemaOne.nodes.length === 0 ? (
+                            <Card>
+                                <CardContent className="flex flex-col items-center justify-center py-16">
+                                    <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-muted-foreground">
+                                            <circle cx="12" cy="12" r="10" /><path d="m9 12 2 2 4-4" />
+                                        </svg>
+                                    </div>
+                                    <h3 className="text-lg font-semibold mb-1">No Schema-1 Nodes Yet</h3>
+                                    <p className="text-muted-foreground text-sm mb-4 text-center max-w-sm">
+                                        Generate the Data Matrix first. Schema-1 is created during that process.
+                                    </p>
+                                </CardContent>
+                            </Card>
+                        ) : (() => {
+                            const entities = schemaOne.nodes.filter(n => n.type === "EXTERNAL_ENTITY");
+                            const processes = schemaOne.nodes.filter(n => n.type === "PROCESS");
+                            const stores = schemaOne.nodes.filter(n => n.type === "DATA_STORE");
 
-                {/* ────────────── Source of Truth Tab ────────────── */}
-                <TabsContent value="schema" className="space-y-6">
-                    {schemaLoading ? (
-                        <div className="flex items-center justify-center py-12">
-                            <p className="text-muted-foreground">Loading Schema-1 data...</p>
-                        </div>
-                    ) : !schemaOne ? (
-                        <Card>
-                            <CardContent className="flex flex-col items-center justify-center py-16">
-                                <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-muted-foreground">
-                                        <circle cx="12" cy="12" r="10" /><path d="m9 12 2 2 4-4" />
-                                    </svg>
-                                </div>
-                                <h3 className="text-lg font-semibold mb-1">No Schema-1 Data Yet</h3>
-                                <p className="text-muted-foreground text-sm mb-4 text-center max-w-sm">
-                                    Generate the Data Matrix first. Schema-1 is created during that process.
-                                </p>
-                            </CardContent>
-                        </Card>
-                    ) : (() => {
-                        const entities = schemaOne.nodes.filter(n => n.type === "EXTERNAL_ENTITY");
-                        const processes = schemaOne.nodes.filter(n => n.type === "PROCESS");
-                        const stores = schemaOne.nodes.filter(n => n.type === "DATA_STORE");
+                            const nodeLabel = (id: string) => {
+                                const node = schemaOne.nodes.find(n => n.id === id);
+                                return node?.name || id;
+                            };
 
-                        const nodeLabel = (id: string) => schemaOne.nodes.find(n => n.id === id)?.label || id;
+                            const classificationColor = (c?: string) => {
+                                switch (c) {
+                                    case "Special Category": return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
+                                    case "PII/Sensitive": return "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400";
+                                    case "Confidential": return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
+                                    case "Internal": return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400";
+                                    case "Public": return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
+                                    default: return "bg-muted text-muted-foreground";
+                                }
+                            };
 
-                        const classificationColor = (c?: string) => {
-                            switch (c) {
-                                case "Special Category": return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
-                                case "PII/Sensitive": return "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400";
-                                case "Confidential": return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
-                                case "Internal": return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400";
-                                case "Public": return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
-                                default: return "bg-muted text-muted-foreground";
-                            }
-                        };
+                            const typeIcon = (type: string) => {
+                                switch (type) {
+                                    case "EXTERNAL_ENTITY": return "👤";
+                                    case "PROCESS": return "⚙️";
+                                    case "DATA_STORE": return "🗄️";
+                                    default: return "📦";
+                                }
+                            };
 
-                        const typeIcon = (type: string) => {
-                            switch (type) {
-                                case "EXTERNAL_ENTITY": return "👤";
-                                case "PROCESS": return "⚙️";
-                                case "DATA_STORE": return "🗄️";
-                                default: return "📦";
-                            }
-                        };
-
-                        const renderNodeCard = (node: SchemaNode) => {
-                            const des = node.data_elements || [];
-                            const hasSensitive = des.some(
-                                de => de.classification === "PII/Sensitive" || de.classification === "Special Category"
-                            );
-                            return (
-                                <Card key={node.id} className={hasSensitive ? "border-orange-200 dark:border-orange-800" : ""}>
-                                    <CardHeader className="pb-3">
-                                        <div className="flex items-start justify-between">
-                                            <div className="flex items-start gap-3">
-                                                <span className="text-xl mt-0.5">{typeIcon(node.type)}</span>
-                                                <div>
-                                                    <CardTitle className="text-base flex items-center gap-2 flex-wrap">
-                                                        {node.label}
-                                                        <Badge variant="outline" className="text-xs font-normal">
-                                                            {node.type.replace(/_/g, " ")}
-                                                        </Badge>
-                                                        {hasSensitive && (
-                                                            <span className="text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-2 py-0.5 rounded-full">
-                                                                Contains Sensitive Data
-                                                            </span>
+                            const renderNodeCard = (node: SchemaNode) => {
+                                const des = node.data_elements || [];
+                                const hasSensitive = des.some(
+                                    de => de.classification === "PII/Sensitive" || de.classification === "Special Category"
+                                );
+                                return (
+                                    <Card key={node.id} className={hasSensitive ? "border-orange-200 dark:border-orange-800" : ""}>
+                                        <CardHeader className="pb-3">
+                                            <div className="flex items-start justify-between">
+                                                <div className="flex items-start gap-3">
+                                                    <span className="text-xl mt-0.5">{typeIcon(node.type)}</span>
+                                                    <div>
+                                                        <CardTitle className="text-base flex items-center gap-2 flex-wrap">
+                                                            {node.name}
+                                                            <Badge variant="outline" className="text-xs font-normal">
+                                                                {node.type.replace(/_/g, " ")}
+                                                            </Badge>
+                                                            {hasSensitive && (
+                                                                <span className="text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-2 py-0.5 rounded-full">
+                                                                    Contains Sensitive Data
+                                                                </span>
+                                                            )}
+                                                        </CardTitle>
+                                                        {node.description && (
+                                                            <p className="text-sm text-muted-foreground mt-1">{node.description}</p>
                                                         )}
-                                                    </CardTitle>
-                                                    {node.description && (
-                                                        <p className="text-sm text-muted-foreground mt-1">{node.description}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-2 flex-shrink-0">
+                                                    {node.sla && node.sla !== "Not specified" && (
+                                                        <span className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-2 py-1 rounded-md font-medium">
+                                                            SLA: {node.sla}
+                                                        </span>
                                                     )}
+                                                    <span className="text-xs bg-muted px-2 py-1 rounded-md">
+                                                        {des.length} data element{des.length !== 1 ? "s" : ""}
+                                                    </span>
                                                 </div>
                                             </div>
-                                            <div className="flex gap-2 flex-shrink-0">
-                                                {node.sla && node.sla !== "Not specified" && (
-                                                    <span className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-2 py-1 rounded-md font-medium">
-                                                        SLA: {node.sla}
-                                                    </span>
-                                                )}
-                                                <span className="text-xs bg-muted px-2 py-1 rounded-md">
-                                                    {des.length} data element{des.length !== 1 ? "s" : ""}
-                                                </span>
-                                            </div>
+                                        </CardHeader>
+                                        <CardContent className="pt-0 space-y-4">
+                                            {/* Data Elements Table */}
+                                            {des.length > 0 && (
+                                                <div>
+                                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Data Elements</p>
+                                                    <div className="rounded-lg border overflow-hidden">
+                                                        <table className="w-full text-xs">
+                                                            <thead>
+                                                                <tr className="bg-muted/50">
+                                                                    <th className="text-left p-2 font-medium">Name</th>
+                                                                    <th className="text-left p-2 font-medium">Classification</th>
+                                                                    <th className="text-left p-2 font-medium hidden md:table-cell">Purpose</th>
+                                                                    <th className="text-left p-2 font-medium hidden lg:table-cell">Retention</th>
+                                                                    <th className="text-left p-2 font-medium hidden lg:table-cell">Legal Basis</th>
+                                                                    <th className="text-left p-2 font-medium hidden xl:table-cell">Owner</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {des.map((de, i) => (
+                                                                    <tr key={i} className="border-t">
+                                                                        <td className="p-2">
+                                                                            <span className="font-medium">{de.name}</span>
+                                                                            {de.description && (
+                                                                                <p className="text-muted-foreground mt-0.5">{de.description}</p>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="p-2">
+                                                                            <span className={`px-1.5 py-0.5 rounded text-xs ${classificationColor(de.classification)}`}>
+                                                                                {de.classification || "—"}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td className="p-2 hidden md:table-cell text-muted-foreground">{de.purpose || "—"}</td>
+                                                                        <td className="p-2 hidden lg:table-cell text-muted-foreground">{de.retention_period || "—"}</td>
+                                                                        <td className="p-2 hidden lg:table-cell text-muted-foreground">{de.legal_basis || "—"}</td>
+                                                                        <td className="p-2 hidden xl:table-cell text-muted-foreground">{de.owner || "—"}</td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Sub-Processes (PROCESS only) */}
+                                            {node.sub_processes && node.sub_processes.length > 0 && (
+                                                <div>
+                                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Sub-Processes / Branches</p>
+                                                    <div className="space-y-2">
+                                                        {node.sub_processes.map((sp, i) => (
+                                                            <div key={i} className="bg-muted/50 rounded-lg p-3 text-sm">
+                                                                <div className="flex items-start justify-between">
+                                                                    <div>
+                                                                        <p className="font-medium">{sp.name}</p>
+                                                                        {sp.description && (
+                                                                            <p className="text-muted-foreground text-xs mt-0.5">{sp.description}</p>
+                                                                        )}
+                                                                    </div>
+                                                                    {sp.routing && sp.routing !== "Not specified" && (
+                                                                        <span className="text-xs bg-background px-2 py-0.5 rounded border flex-shrink-0 ml-2">
+                                                                            → {sp.routing}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Integrations (DATA_STORE only) */}
+                                            {node.integrations && node.integrations.length > 0 && (
+                                                <div>
+                                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Integrations</p>
+                                                    <div className="space-y-1">
+                                                        {node.integrations.map((integ, i) => (
+                                                            <div key={i} className="flex items-center justify-between text-xs bg-muted/50 rounded px-3 py-2">
+                                                                <span className="font-medium">{integ.system}</span>
+                                                                <span className="text-muted-foreground">
+                                                                    {integ.type && integ.type !== "Not specified" ? integ.type : ""}
+                                                                    {integ.direction && integ.direction !== "Not specified" ? ` · ${integ.direction}` : ""}
+                                                                </span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Reference Documents */}
+                                            {node.reference_documents && node.reference_documents.length > 0 && (
+                                                <div>
+                                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Reference Documents</p>
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {node.reference_documents.map((doc, i) => (
+                                                            <span key={i} className="text-xs bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 px-2 py-0.5 rounded">
+                                                                {doc}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </CardContent>
+                                    </Card>
+                                );
+                            };
+
+                            return (
+                                <div className="space-y-6">
+                                    {/* Summary Header */}
+                                    <div className="flex items-center gap-4 flex-wrap">
+                                        <div className="flex items-center gap-2 text-sm">
+                                            <span className="text-muted-foreground">Entities:</span>
+                                            <Badge variant="secondary">{entities.length}</Badge>
                                         </div>
-                                    </CardHeader>
-                                    <CardContent className="pt-0 space-y-4">
-                                        {/* Data Elements Table */}
-                                        {des.length > 0 && (
-                                            <div>
-                                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Data Elements</p>
-                                                <div className="rounded-lg border overflow-hidden">
-                                                    <table className="w-full text-xs">
+                                        <div className="flex items-center gap-2 text-sm">
+                                            <span className="text-muted-foreground">Processes:</span>
+                                            <Badge variant="secondary">{processes.length}</Badge>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-sm">
+                                            <span className="text-muted-foreground">Data Stores:</span>
+                                            <Badge variant="secondary">{stores.length}</Badge>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-sm">
+                                            <span className="text-muted-foreground">Flows:</span>
+                                            <Badge variant="secondary">{(schemaOne.flows || []).length}</Badge>
+                                        </div>
+                                        {schemaOne.meta?.generated_at && (
+                                            <span className="text-xs text-muted-foreground ml-auto">
+                                                Generated: {new Date(schemaOne.meta.generated_at).toLocaleString()}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {/* External Entities */}
+                                    {entities.length > 0 && (
+                                        <div>
+                                            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">
+                                                👤 External Entities ({entities.length})
+                                            </h3>
+                                            <div className="grid gap-4">{entities.map(renderNodeCard)}</div>
+                                        </div>
+                                    )}
+
+                                    {/* Processes */}
+                                    {processes.length > 0 && (
+                                        <div>
+                                            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">
+                                                ⚙️ Processes ({processes.length})
+                                            </h3>
+                                            <div className="grid gap-4">{processes.map(renderNodeCard)}</div>
+                                        </div>
+                                    )}
+
+                                    {/* Data Stores */}
+                                    {stores.length > 0 && (
+                                        <div>
+                                            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">
+                                                🗄️ Data Stores ({stores.length})
+                                            </h3>
+                                            <div className="grid gap-4">{stores.map(renderNodeCard)}</div>
+                                        </div>
+                                    )}
+
+                                    {/* Flows Table */}
+                                    {(schemaOne.flows || []).length > 0 && (
+                                        <div>
+                                            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">
+                                                🔀 Data Flows ({(schemaOne.flows || []).length})
+                                            </h3>
+                                            <Card className="overflow-hidden">
+                                                <div className="rounded-lg overflow-x-auto">
+                                                    <table className="w-full text-sm">
                                                         <thead>
-                                                            <tr className="bg-muted/50">
-                                                                <th className="text-left p-2 font-medium">Name</th>
-                                                                <th className="text-left p-2 font-medium">Classification</th>
-                                                                <th className="text-left p-2 font-medium hidden md:table-cell">Purpose</th>
-                                                                <th className="text-left p-2 font-medium hidden lg:table-cell">Retention</th>
-                                                                <th className="text-left p-2 font-medium hidden lg:table-cell">Legal Basis</th>
-                                                                <th className="text-left p-2 font-medium hidden xl:table-cell">Owner</th>
+                                                            <tr className="bg-muted/50 border-b">
+                                                                <th className="text-left p-3 font-medium">Source</th>
+                                                                <th className="text-left p-3 font-medium"></th>
+                                                                <th className="text-left p-3 font-medium">Target</th>
+                                                                <th className="text-left p-3 font-medium">Description</th>
+                                                                <th className="text-left p-3 font-medium hidden md:table-cell">Mechanism</th>
+                                                                <th className="text-left p-3 font-medium hidden lg:table-cell">Cross-Border</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody>
-                                                            {des.map((de, i) => (
-                                                                <tr key={i} className="border-t">
-                                                                    <td className="p-2">
-                                                                        <span className="font-medium">{de.name}</span>
-                                                                        {de.description && (
-                                                                            <p className="text-muted-foreground mt-0.5">{de.description}</p>
+                                                            {(schemaOne.flows || []).map((flow: any, i: number) => (
+                                                                <tr key={flow.id || i} className="border-t hover:bg-muted/30 transition-colors">
+                                                                    <td className="p-3 font-medium">{nodeLabel(flow.source)}</td>
+                                                                    <td className="p-3 text-muted-foreground">
+                                                                        {flow.bi_directional ? "⇄" : "→"}
+                                                                    </td>
+                                                                    <td className="p-3 font-medium">{nodeLabel(flow.target)}</td>
+                                                                    <td className="p-3 text-muted-foreground">
+                                                                        {flow.label}
+                                                                        {flow.data_elements && flow.data_elements.length > 0 && (
+                                                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                                                {flow.data_elements.map((de: string, j: number) => (
+                                                                                    <span key={j} className="text-xs bg-muted px-1.5 py-0.5 rounded">{de}</span>
+                                                                                ))}
+                                                                            </div>
                                                                         )}
                                                                     </td>
-                                                                    <td className="p-2">
-                                                                        <span className={`px-1.5 py-0.5 rounded text-xs ${classificationColor(de.classification)}`}>
-                                                                            {de.classification || "—"}
-                                                                        </span>
+                                                                    <td className="p-3 hidden md:table-cell text-muted-foreground">
+                                                                        {flow.transfer_mechanism && flow.transfer_mechanism !== "Not specified" ? flow.transfer_mechanism : "—"}
                                                                     </td>
-                                                                    <td className="p-2 hidden md:table-cell text-muted-foreground">{de.purpose || "—"}</td>
-                                                                    <td className="p-2 hidden lg:table-cell text-muted-foreground">{de.retention_period || "—"}</td>
-                                                                    <td className="p-2 hidden lg:table-cell text-muted-foreground">{de.legal_basis || "—"}</td>
-                                                                    <td className="p-2 hidden xl:table-cell text-muted-foreground">{de.owner || "—"}</td>
+                                                                    <td className="p-3 hidden lg:table-cell">
+                                                                        {flow.cross_border === true && (
+                                                                            <span className="text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-2 py-0.5 rounded">Yes</span>
+                                                                        )}
+                                                                        {flow.cross_border === false && (
+                                                                            <span className="text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-2 py-0.5 rounded">No</span>
+                                                                        )}
+                                                                        {(flow.cross_border === null || flow.cross_border === undefined) && (
+                                                                            <span className="text-xs text-muted-foreground">—</span>
+                                                                        )}
+                                                                    </td>
                                                                 </tr>
                                                             ))}
                                                         </tbody>
                                                     </table>
                                                 </div>
-                                            </div>
-                                        )}
-
-                                        {/* Sub-Processes (PROCESS only) */}
-                                        {node.sub_processes && node.sub_processes.length > 0 && (
-                                            <div>
-                                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Sub-Processes / Branches</p>
-                                                <div className="space-y-2">
-                                                    {node.sub_processes.map((sp, i) => (
-                                                        <div key={i} className="bg-muted/50 rounded-lg p-3 text-sm">
-                                                            <div className="flex items-start justify-between">
-                                                                <div>
-                                                                    <p className="font-medium">{sp.name}</p>
-                                                                    {sp.description && (
-                                                                        <p className="text-muted-foreground text-xs mt-0.5">{sp.description}</p>
-                                                                    )}
-                                                                </div>
-                                                                {sp.routing && sp.routing !== "Not specified" && (
-                                                                    <span className="text-xs bg-background px-2 py-0.5 rounded border flex-shrink-0 ml-2">
-                                                                        → {sp.routing}
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Integrations (DATA_STORE only) */}
-                                        {node.integrations && node.integrations.length > 0 && (
-                                            <div>
-                                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Integrations</p>
-                                                <div className="space-y-1">
-                                                    {node.integrations.map((integ, i) => (
-                                                        <div key={i} className="flex items-center justify-between text-xs bg-muted/50 rounded px-3 py-2">
-                                                            <span className="font-medium">{integ.system}</span>
-                                                            <span className="text-muted-foreground">
-                                                                {integ.type && integ.type !== "Not specified" ? integ.type : ""}
-                                                                {integ.direction && integ.direction !== "Not specified" ? ` · ${integ.direction}` : ""}
-                                                            </span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Reference Documents */}
-                                        {node.reference_documents && node.reference_documents.length > 0 && (
-                                            <div>
-                                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Reference Documents</p>
-                                                <div className="flex flex-wrap gap-1">
-                                                    {node.reference_documents.map((doc, i) => (
-                                                        <span key={i} className="text-xs bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 px-2 py-0.5 rounded">
-                                                            {doc}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </CardContent>
-                                </Card>
-                            );
-                        };
-
-                        return (
-                            <div className="space-y-6">
-                                {/* Summary Header */}
-                                <div className="flex items-center gap-4 flex-wrap">
-                                    <div className="flex items-center gap-2 text-sm">
-                                        <span className="text-muted-foreground">Entities:</span>
-                                        <Badge variant="secondary">{entities.length}</Badge>
-                                    </div>
-                                    <div className="flex items-center gap-2 text-sm">
-                                        <span className="text-muted-foreground">Processes:</span>
-                                        <Badge variant="secondary">{processes.length}</Badge>
-                                    </div>
-                                    <div className="flex items-center gap-2 text-sm">
-                                        <span className="text-muted-foreground">Data Stores:</span>
-                                        <Badge variant="secondary">{stores.length}</Badge>
-                                    </div>
-                                    <div className="flex items-center gap-2 text-sm">
-                                        <span className="text-muted-foreground">Flows:</span>
-                                        <Badge variant="secondary">{schemaOne.flows.length}</Badge>
-                                    </div>
-                                    {schemaOne.meta?.generated_at && (
-                                        <span className="text-xs text-muted-foreground ml-auto">
-                                            Generated: {new Date(schemaOne.meta.generated_at).toLocaleString()}
-                                        </span>
+                                            </Card>
+                                        </div>
                                     )}
                                 </div>
-
-                                {/* External Entities */}
-                                {entities.length > 0 && (
-                                    <div>
-                                        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">
-                                            👤 External Entities ({entities.length})
-                                        </h3>
-                                        <div className="grid gap-4">{entities.map(renderNodeCard)}</div>
-                                    </div>
-                                )}
-
-                                {/* Processes */}
-                                {processes.length > 0 && (
-                                    <div>
-                                        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">
-                                            ⚙️ Processes ({processes.length})
-                                        </h3>
-                                        <div className="grid gap-4">{processes.map(renderNodeCard)}</div>
-                                    </div>
-                                )}
-
-                                {/* Data Stores */}
-                                {stores.length > 0 && (
-                                    <div>
-                                        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">
-                                            🗄️ Data Stores ({stores.length})
-                                        </h3>
-                                        <div className="grid gap-4">{stores.map(renderNodeCard)}</div>
-                                    </div>
-                                )}
-
-                                {/* Flows Table */}
-                                {schemaOne.flows.length > 0 && (
-                                    <div>
-                                        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">
-                                            🔀 Data Flows ({schemaOne.flows.length})
-                                        </h3>
-                                        <Card>
-                                            <div className="rounded-lg overflow-hidden">
-                                                <table className="w-full text-sm">
-                                                    <thead>
-                                                        <tr className="bg-muted/50 border-b">
-                                                            <th className="text-left p-3 font-medium">Source</th>
-                                                            <th className="text-left p-3 font-medium"></th>
-                                                            <th className="text-left p-3 font-medium">Target</th>
-                                                            <th className="text-left p-3 font-medium">Description</th>
-                                                            <th className="text-left p-3 font-medium hidden md:table-cell">Mechanism</th>
-                                                            <th className="text-left p-3 font-medium hidden lg:table-cell">Cross-Border</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {schemaOne.flows.map((flow, i) => (
-                                                            <tr key={flow.id || i} className="border-t hover:bg-muted/30 transition-colors">
-                                                                <td className="p-3 font-medium">{nodeLabel(flow.source)}</td>
-                                                                <td className="p-3 text-muted-foreground">
-                                                                    {flow.bi_directional ? "⇄" : "→"}
-                                                                </td>
-                                                                <td className="p-3 font-medium">{nodeLabel(flow.target)}</td>
-                                                                <td className="p-3 text-muted-foreground">
-                                                                    {flow.label}
-                                                                    {flow.data_elements && flow.data_elements.length > 0 && (
-                                                                        <div className="flex flex-wrap gap-1 mt-1">
-                                                                            {flow.data_elements.map((de, j) => (
-                                                                                <span key={j} className="text-xs bg-muted px-1.5 py-0.5 rounded">{de}</span>
-                                                                            ))}
-                                                                        </div>
-                                                                    )}
-                                                                </td>
-                                                                <td className="p-3 hidden md:table-cell text-muted-foreground">
-                                                                    {flow.transfer_mechanism && flow.transfer_mechanism !== "Not specified" ? flow.transfer_mechanism : "—"}
-                                                                </td>
-                                                                <td className="p-3 hidden lg:table-cell">
-                                                                    {flow.cross_border === true && (
-                                                                        <span className="text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-2 py-0.5 rounded">Yes</span>
-                                                                    )}
-                                                                    {flow.cross_border === false && (
-                                                                        <span className="text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-2 py-0.5 rounded">No</span>
-                                                                    )}
-                                                                    {(flow.cross_border === null || flow.cross_border === undefined) && (
-                                                                        <span className="text-xs text-muted-foreground">—</span>
-                                                                    )}
-                                                                </td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </Card>
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })()}
+                            );
+                        })()}
+                    </div>
                 </TabsContent>
 
-                <TabsContent value="dfd" className="space-y-4">
-                    {dfdLoading ? (
+                <TabsContent value="dfd" className="space-y-4 min-w-0 overflow-x-auto">
+                    {dfdLoading || pipelineStatus === "pending" || pipelineStatus === "processing" ? (
                         <div className="space-y-3">
                             <Skeleton className="h-64 w-full" />
-                        </div>
-                    ) : mermaidCode ? (
-                        <Card>
-                            <CardHeader>
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <CardTitle>Data Flow Diagram</CardTitle>
-                                        <CardDescription>Mermaid-based DFD generated from Schema-1</CardDescription>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        {dfdEditMode ? (
-                                            <>
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() => {
-                                                        setDfdDraftCode(mermaidCode || "");
-                                                        setDfdEditMode(false);
-                                                    }}
-                                                    disabled={savingDfd}
-                                                >
-                                                    Cancel
-                                                </Button>
-                                                <Button
-                                                    size="sm"
-                                                    onClick={handleSaveDfd}
-                                                    disabled={savingDfd}
-                                                >
-                                                    {savingDfd ? "Saving..." : "Save"}
-                                                </Button>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() => setDfdEditMode(true)}
-                                                >
-                                                    Edit
-                                                </Button>
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={handleGenerateDfd}
-                                                    disabled={generatingDfd}
-                                                >
-                                                    {generatingDfd ? "Regenerating..." : "Regenerate"}
-                                                </Button>
-                                            </>
-                                        )}
-                                    </div>
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                {dfdEditMode && (
-                                    <div className="mb-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <Label>Mermaid code</Label>
-                                            <Textarea
-                                                value={dfdDraftCode}
-                                                onChange={(e) => setDfdDraftCode(e.target.value)}
-                                                rows={14}
-                                                className="font-mono text-xs"
-                                            />
-                                            <p className="text-xs text-muted-foreground">
-                                                Tip: icons use HTML labels with Font Awesome (e.g. <code>&lt;i class='fa-solid fa-database'&gt;&lt;/i&gt;</code>).
-                                            </p>
-                                        </div>
-                                        <div className="space-y-2">
-                                            <p className="text-xs font-medium text-muted-foreground">Preview</p>
-                                            <div className="bg-white rounded-lg p-6 overflow-x-auto border" ref={mermaidRef}>
-                                                <p className="text-sm text-muted-foreground">Loading diagram...</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-                                {mermaidError ? (
-                                    <div className="bg-red-50 dark:bg-red-950/20 rounded-lg p-6 border border-red-200 dark:border-red-800">
-                                        <p className="text-sm text-red-600 dark:text-red-400 font-medium mb-2">Failed to render diagram</p>
-                                        <p className="text-xs text-red-500 dark:text-red-400/70 mb-3">{mermaidError}</p>
-                                        <p className="text-xs text-muted-foreground">Click &quot;Regenerate&quot; to generate fresh Mermaid code.</p>
-                                    </div>
-                                ) : (
-                                    !dfdEditMode && (
-                                        <div className="bg-white rounded-lg p-6 overflow-x-auto border" ref={mermaidRef}>
-                                            <p className="text-sm text-muted-foreground">Loading diagram...</p>
-                                        </div>
-                                    )
-                                )}
-                                {/* Raw Mermaid Code Toggle */}
-                                <details className="mt-4">
-                                    <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-                                        View raw Mermaid code
-                                    </summary>
-                                    <pre className="mt-2 bg-muted/50 rounded-lg p-4 text-xs font-mono overflow-x-auto">
-                                        {dfdEditMode ? dfdDraftCode : mermaidCode}
-                                    </pre>
-                                </details>
-                            </CardContent>
-                        </Card>
-                    ) : (
-                        <Card className="border-dashed">
-                            <CardContent className="flex flex-col items-center justify-center py-12">
-                                <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-8 h-8 text-muted-foreground">
-                                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                                        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-                                        <line x1="12" x2="12" y1="22.08" y2="12" />
-                                    </svg>
-                                </div>
-                                <h3 className="text-lg font-semibold mb-1">No DFD Yet</h3>
-                                <p className="text-muted-foreground text-sm mb-4 text-center max-w-sm">
-                                    {hasDataMatrix
-                                        ? "Generate the Data Flow Diagram from the Schema-1 data."
-                                        : "Generate the Data Matrix first, then you can create the DFD."}
+                            {pipelineStatus && pipelineStatus !== "not_started" && pipelineStatus !== "completed" && (
+                                <p className="text-sm text-muted-foreground text-center flex items-center justify-center gap-2">
+                                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /><path d="M9 12l2 2 4-4" /></svg>
+                                    Pipeline is processing...
                                 </p>
-                                {hasDataMatrix && (
-                                    <Button
-                                        onClick={handleGenerateDfd}
-                                        disabled={generatingDfd}
-                                    >
-                                        {generatingDfd ? "Generating..." : "Generate Data Flow"}
-                                    </Button>
-                                )}
-                            </CardContent>
+                            )}
+                        </div>
+                    ) : dfdHtml ? (
+                        <div className="w-full relative min-h-[800px] h-[90vh] min-w-0 bg-white rounded-lg border overflow-hidden">
+                            <iframe 
+                                srcDoc={dfdHtml} 
+                                className="w-full h-full border-none"
+                                title="Data Flow Diagram"
+                                sandbox="allow-scripts allow-same-origin"
+                            />
+                        </div>
+                    ) : dfdData ? (
+                        <div className="w-full relative min-h-[500px] min-w-0 overflow-x-auto">
+                            <DfdHtmlRenderer dfd={dfdData} />
+                        </div>
+                    ) : (
+                        <Card className="flex flex-col items-center justify-center p-12 bg-slate-50 border-dashed border-2">
+                            <Activity className="w-12 h-12 text-slate-300 mb-4" />
+                            <h3 className="text-lg font-medium text-slate-600">No Data Flow Diagram</h3>
+                            <p className="text-sm text-slate-500 mt-1 max-w-sm text-center">
+                                A DFD will be automatically generated once the Schema mapping completes.
+                            </p>
                         </Card>
                     )}
                 </TabsContent>
             </Tabs>
 
             {/* Add Notes Dialog */}
-            <Dialog open={notesDialogOpen} onOpenChange={setNotesDialogOpen}>
+            < Dialog open={notesDialogOpen} onOpenChange={setNotesDialogOpen} >
                 <DialogContent className="max-w-2xl">
                     <DialogHeader>
                         <DialogTitle>
@@ -1754,10 +1637,10 @@ export default function VerticalWorkspacePage() {
                         </Button>
                     </DialogFooter>
                 </DialogContent>
-            </Dialog>
+            </Dialog >
 
             {/* Delete Confirmation Dialog */}
-            <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+            < Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen} >
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Delete Session</DialogTitle>
@@ -1783,7 +1666,69 @@ export default function VerticalWorkspacePage() {
                         </Button>
                     </DialogFooter>
                 </DialogContent>
+            </Dialog >
+
+            {/* Mode Selection Dialog */}
+            <Dialog open={modeModalOpen} onOpenChange={setModeModalOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Generate Data Matrix</DialogTitle>
+                        <DialogDescription>
+                            Select the processing engine mode for generating the Data Matrix and Schemas.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4 space-y-4">
+                        <label className="flex items-start space-x-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 border-slate-200 dark:border-slate-800">
+                            <input 
+                                type="radio" 
+                                name="processingMode" 
+                                value="rlm" 
+                                checked={selectedMode === "rlm"}
+                                onChange={() => setSelectedMode("rlm")}
+                                className="mt-1"
+                            />
+                            <div>
+                                <p className="font-medium text-sm">DeepSeek RLM Mode</p>
+                                <p className="text-xs text-muted-foreground">Deep reasoning model optimized for high accuracy extraction.</p>
+                            </div>
+                        </label>
+                        <label className="flex items-start space-x-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 border-slate-200 dark:border-slate-800">
+                            <input 
+                                type="radio" 
+                                name="processingMode" 
+                                value="aggressive" 
+                                checked={selectedMode === "aggressive"}
+                                onChange={() => setSelectedMode("aggressive")}
+                                className="mt-1"
+                            />
+                            <div>
+                                <p className="font-medium text-sm">Aggressive Engine Mode</p>
+                                <p className="text-xs text-muted-foreground">Standard fast processing optimized for extensive text extraction.</p>
+                            </div>
+                        </label>
+                        <label className="flex items-start space-x-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 border-slate-200 dark:border-slate-800">
+                            <input 
+                                type="radio" 
+                                name="processingMode" 
+                                value="normal" 
+                                checked={selectedMode === "normal"}
+                                onChange={() => setSelectedMode("normal")}
+                                className="mt-1"
+                            />
+                            <div>
+                                <p className="font-medium text-sm">Normal Mode</p>
+                                <p className="text-xs text-muted-foreground">Balanced processing and extraction.</p>
+                            </div>
+                        </label>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setModeModalOpen(false)}>Cancel</Button>
+                        <Button onClick={confirmGenerateMatrix} disabled={generatingPipeline}>
+                            {generatingPipeline ? "Initiating..." : "Generate Now"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
             </Dialog>
-        </div>
+        </div >
     );
 }

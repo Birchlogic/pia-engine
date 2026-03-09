@@ -7,7 +7,178 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ─── Enums ───────────────────────────────────────────────────
+model User {
+  id                   String             @id @default(uuid())
+  email                String             @unique
+  name                 String
+  password             String
+  role                 UserRole           @default(analyst)
+  orgId                String?            @map("org_id")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+  createdSessions      InterviewSession[] @relation("SessionCreatedBy")
+  createdOrganizations Organization[]     @relation("OrgCreatedBy")
+  createdProjects      Project[]          @relation("ProjectCreatedBy")
+  uploadedFiles        SessionFile[]      @relation("FileUploadedBy")
+  organization         Organization?      @relation(fields: [orgId], references: [id])
+  createdVerticals     Vertical[]         @relation("VerticalCreatedBy")
+
+  @@map("users")
+}
+
+model Organization {
+  id              String    @id @default(uuid())
+  name            String
+  industry        String?
+  jurisdiction    String?
+  regulatoryScope String[]  @map("regulatory_scope")
+  sizeBand        SizeBand? @map("size_band")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  createdById     String    @map("created_by")
+  creator         User      @relation("OrgCreatedBy", fields: [createdById], references: [id])
+  projects        Project[]
+  users           User[]
+
+  @@map("organizations")
+}
+
+model Project {
+  id                    String         @id @default(uuid())
+  orgId                 String         @map("org_id")
+  name                  String
+  description           String?
+  applicableRegulations String[]       @map("applicable_regulations")
+  assessmentType        AssessmentType @default(full_pia) @map("assessment_type")
+  targetCompletionDate  DateTime?      @map("target_completion_date")
+  status                ProjectStatus  @default(setup)
+  createdAt             DateTime       @default(now()) @map("created_at")
+  updatedAt             DateTime       @updatedAt @map("updated_at")
+  createdById           String         @map("created_by")
+  dfd_graphs            DfdGraph[]
+  creator               User           @relation("ProjectCreatedBy", fields: [createdById], references: [id])
+  organization          Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  verticals             Vertical[]
+
+  @@map("projects")
+}
+
+model Vertical {
+  id               String             @id @default(uuid())
+  projectId        String             @map("project_id")
+  name             String
+  description      String?
+  headName         String?            @map("head_name")
+  headRole         String?            @map("head_role")
+  headContact      String?            @map("head_contact")
+  assessmentStatus AssessmentStatus   @default(not_started) @map("assessment_status")
+  sortOrder        Int                @default(0) @map("sort_order")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+  createdById      String             @map("created_by")
+  dataMappingRows  DataMappingRow[]
+  dataMatrix       DataMatrix?
+  dfdGraph         DfdGraph?
+  sessions         InterviewSession[]
+  creator          User               @relation("VerticalCreatedBy", fields: [createdById], references: [id])
+  project          Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("verticals")
+}
+
+model InterviewSession {
+  id                     String             @id @default(uuid())
+  verticalId             String             @map("vertical_id")
+  sessionDate            DateTime           @map("session_date")
+  sessionNumber          Int                @map("session_number")
+  durationMinutes        Int?               @map("duration_minutes")
+  interviewerNames       String[]           @map("interviewer_names")
+  intervieweeNames       String[]           @map("interviewee_names")
+  intervieweeRoles       String[]           @map("interviewee_roles")
+  assessmentCriteriaTags String[]           @map("assessment_criteria_tags")
+  status                 SessionStatus      @default(draft)
+  version                Int                @default(1)
+  parentVersionId        String?            @map("parent_version_id")
+  rawTextNotes           String?            @map("raw_text_notes")
+  aiTranscript           String?            @map("ai_transcript")
+  aiSummary              String?            @map("ai_summary")
+  createdAt              DateTime           @default(now()) @map("created_at")
+  updatedAt              DateTime           @updatedAt @map("updated_at")
+  createdById            String             @map("created_by")
+  creator                User               @relation("SessionCreatedBy", fields: [createdById], references: [id])
+  parentVersion          InterviewSession?  @relation("SessionVersionChain", fields: [parentVersionId], references: [id])
+  childVersions          InterviewSession[] @relation("SessionVersionChain")
+  vertical               Vertical           @relation(fields: [verticalId], references: [id], onDelete: Cascade)
+  files                  SessionFile[]
+
+  @@map("interview_sessions")
+}
+
+model SessionFile {
+  id                  String              @id @default(uuid())
+  sessionId           String              @map("session_id")
+  fileName            String              @map("file_name")
+  fileType            FileType            @map("file_type")
+  mimeType            String              @map("mime_type")
+  fileSizeBytes       BigInt              @map("file_size_bytes")
+  storagePath         String              @map("storage_path")
+  transcriptionStatus TranscriptionStatus @default(not_applicable) @map("transcription_status")
+  transcribedText     String?             @map("transcribed_text")
+  createdAt           DateTime            @default(now()) @map("created_at")
+  uploadedById        String              @map("uploaded_by")
+  session             InterviewSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  uploadedBy          User                @relation("FileUploadedBy", fields: [uploadedById], references: [id])
+
+  @@map("session_files")
+}
+
+model DataMatrix {
+  id            String   @id @default(uuid())
+  verticalId    String   @unique @map("vertical_id")
+  schemaOneJson Json     @map("schema_one_json")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  vertical      Vertical @relation(fields: [verticalId], references: [id], onDelete: Cascade)
+
+  @@map("data_matrices")
+}
+
+model DataMappingRow {
+  id                 String   @id @default(uuid())
+  verticalId         String   @map("vertical_id")
+  sNo                Int      @map("s_no")
+  dataCategory       String   @map("data_category")
+  description        String
+  purpose            String
+  dataOwner          String   @map("data_owner")
+  storageLocation    String   @map("storage_location")
+  dataClassification String   @map("data_classification")
+  retentionPeriod    String   @map("retention_period")
+  legalBasis         String   @map("legal_basis")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  vertical           Vertical @relation(fields: [verticalId], references: [id], onDelete: Cascade)
+
+  @@map("data_mapping_rows")
+}
+
+model DfdGraph {
+  id                        String    @id @default(uuid())
+  verticalId                String?   @unique @map("vertical_id")
+  mermaidCode               String?   @map("mermaid_code")
+  createdAt                 DateTime  @default(now()) @map("created_at")
+  updatedAt                 DateTime  @updatedAt @map("updated_at")
+  dfd_type                  DfdType   @default(vertical)
+  generated_from_matrix_ids String[]
+  graph_data                Json?
+  layout_config             Json?
+  project_id                String
+  status                    DfdStatus @default(draft)
+  projects                  Project   @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  vertical                  Vertical? @relation(fields: [verticalId], references: [id], onDelete: Cascade)
+
+  @@map("dfd_graphs")
+}
 
 enum UserRole {
   admin
@@ -69,189 +240,12 @@ enum TranscriptionStatus {
   failed
 }
 
-// ─── Models ──────────────────────────────────────────────────
-
-model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  name      String
-  password  String
-  role      UserRole @default(analyst)
-  orgId     String?  @map("org_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  organization         Organization?      @relation(fields: [orgId], references: [id])
-  createdOrganizations Organization[]     @relation("OrgCreatedBy")
-  createdProjects      Project[]          @relation("ProjectCreatedBy")
-  createdVerticals     Vertical[]         @relation("VerticalCreatedBy")
-  createdSessions      InterviewSession[] @relation("SessionCreatedBy")
-  uploadedFiles        SessionFile[]      @relation("FileUploadedBy")
-
-  @@map("users")
+enum DfdStatus {
+  draft
+  approved
 }
 
-model Organization {
-  id              String   @id @default(uuid())
-  name            String
-  industry        String?
-  jurisdiction    String?
-  regulatoryScope String[] @map("regulatory_scope")
-  sizeBand        SizeBand? @map("size_band")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-  createdById     String   @map("created_by")
-
-  // Relations
-  projects  Project[]
-  users     User[]
-  creator   User @relation("OrgCreatedBy", fields: [createdById], references: [id])
-
-  @@map("organizations")
-}
-
-model Project {
-  id                    String         @id @default(uuid())
-  orgId                 String         @map("org_id")
-  name                  String
-  description           String?
-  applicableRegulations String[]       @map("applicable_regulations")
-  assessmentType        AssessmentType @default(full_pia) @map("assessment_type")
-  targetCompletionDate  DateTime?      @map("target_completion_date")
-  status                ProjectStatus  @default(setup)
-  createdAt             DateTime       @default(now()) @map("created_at")
-  updatedAt             DateTime       @updatedAt @map("updated_at")
-  createdById           String         @map("created_by")
-
-  // Relations
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  creator      User         @relation("ProjectCreatedBy", fields: [createdById], references: [id])
-  verticals    Vertical[]
-
-  @@map("projects")
-}
-
-model Vertical {
-  id               String           @id @default(uuid())
-  projectId        String           @map("project_id")
-  name             String
-  description      String?
-  headName         String?          @map("head_name")
-  headRole         String?          @map("head_role")
-  headContact      String?          @map("head_contact")
-  assessmentStatus AssessmentStatus @default(not_started) @map("assessment_status")
-  sortOrder        Int              @default(0) @map("sort_order")
-  createdAt        DateTime         @default(now()) @map("created_at")
-  updatedAt        DateTime         @updatedAt @map("updated_at")
-  createdById      String           @map("created_by")
-
-  // Relations
-  project        Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  creator        User               @relation("VerticalCreatedBy", fields: [createdById], references: [id])
-  sessions       InterviewSession[]
-  dataMatrix     DataMatrix?
-  dataMappingRows DataMappingRow[]
-  dfdGraph       DfdGraph?
-
-  @@map("verticals")
-}
-
-model InterviewSession {
-  id                    String        @id @default(uuid())
-  verticalId            String        @map("vertical_id")
-  sessionDate           DateTime      @map("session_date")
-  sessionNumber         Int           @map("session_number")
-  durationMinutes       Int?          @map("duration_minutes")
-  interviewerNames      String[]      @map("interviewer_names")
-  intervieweeNames      String[]      @map("interviewee_names")
-  intervieweeRoles      String[]      @map("interviewee_roles")
-  assessmentCriteriaTags String[]     @map("assessment_criteria_tags")
-  status                SessionStatus @default(draft)
-  version               Int           @default(1)
-  parentVersionId       String?       @map("parent_version_id")
-  rawTextNotes          String?       @map("raw_text_notes")
-  aiTranscript          String?       @map("ai_transcript")
-  aiSummary             String?       @map("ai_summary")
-  createdAt             DateTime      @default(now()) @map("created_at")
-  updatedAt             DateTime      @updatedAt @map("updated_at")
-  createdById           String        @map("created_by")
-
-  // Relations
-  vertical      Vertical          @relation(fields: [verticalId], references: [id], onDelete: Cascade)
-  creator       User              @relation("SessionCreatedBy", fields: [createdById], references: [id])
-  parentVersion InterviewSession? @relation("SessionVersionChain", fields: [parentVersionId], references: [id])
-  childVersions InterviewSession[] @relation("SessionVersionChain")
-  files         SessionFile[]
-
-  @@map("interview_sessions")
-}
-
-model SessionFile {
-  id                  String              @id @default(uuid())
-  sessionId           String              @map("session_id")
-  fileName            String              @map("file_name")
-  fileType            FileType            @map("file_type")
-  mimeType            String              @map("mime_type")
-  fileSizeBytes       BigInt              @map("file_size_bytes")
-  storagePath         String              @map("storage_path")
-  transcriptionStatus TranscriptionStatus @default(not_applicable) @map("transcription_status")
-  transcribedText     String?             @map("transcribed_text")
-  createdAt           DateTime            @default(now()) @map("created_at")
-  uploadedById        String              @map("uploaded_by")
-
-  // Relations
-  session    InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  uploadedBy User             @relation("FileUploadedBy", fields: [uploadedById], references: [id])
-
-  @@map("session_files")
-}
-
-// ─── Data Matrix & DFD ──────────────────────────────────────
-
-model DataMatrix {
-  id             String   @id @default(uuid())
-  verticalId     String   @unique @map("vertical_id")
-  schemaOneJson  Json     @map("schema_one_json")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  vertical Vertical @relation(fields: [verticalId], references: [id], onDelete: Cascade)
-
-  @@map("data_matrices")
-}
-
-model DataMappingRow {
-  id                 String   @id @default(uuid())
-  verticalId         String   @map("vertical_id")
-  sNo                Int      @map("s_no")
-  dataCategory       String   @map("data_category")
-  description        String
-  purpose            String
-  dataOwner          String   @map("data_owner")
-  storageLocation    String   @map("storage_location")
-  dataClassification String   @map("data_classification")
-  retentionPeriod    String   @map("retention_period")
-  legalBasis         String   @map("legal_basis")
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  vertical Vertical @relation(fields: [verticalId], references: [id], onDelete: Cascade)
-
-  @@map("data_mapping_rows")
-}
-
-model DfdGraph {
-  id          String   @id @default(uuid())
-  verticalId  String   @unique @map("vertical_id")
-  mermaidCode String   @map("mermaid_code")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  vertical Vertical @relation(fields: [verticalId], references: [id], onDelete: Cascade)
-
-  @@map("dfd_graphs")
+enum DfdType {
+  vertical
+  master
 }
