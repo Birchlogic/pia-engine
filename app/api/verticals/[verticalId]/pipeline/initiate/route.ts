@@ -58,6 +58,16 @@ export async function POST(
     }
 
     try {
+        // Delete existing session on the Python backend first (it treats session_id as unique)
+        try {
+            await fetch(`${PIPELINE_API}/api/session/${verticalId}`, {
+                method: "DELETE",
+            });
+        } catch (deleteErr) {
+            // Best-effort: don't block initiation if delete fails
+            console.warn("Pre-delete of existing session failed (non-blocking):", deleteErr);
+        }
+
         const payload = {
             session_id: verticalId,
             department: vertical.name,
