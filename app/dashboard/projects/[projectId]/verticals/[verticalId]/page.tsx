@@ -28,7 +28,7 @@ import { Label } from "@/components/ui/label";
 import { DfdHtmlRenderer, type DfdData } from "@/components/dfd/DfdHtmlRenderer";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Activity } from "lucide-react";
+import { Activity, ChevronDown, ChevronUp } from "lucide-react";
 
 type SessionFile = {
     id: string;
@@ -162,6 +162,8 @@ export default function VerticalWorkspacePage() {
     const [newDialogOpen, setNewDialogOpen] = useState(false);
     const [creating, setCreating] = useState(false);
     const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+    const [matrixOpen, setMatrixOpen] = useState(false);
+    const [schemaOpen, setSchemaOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [newForm, setNewForm] = useState({
         intervieweeNames: "",
@@ -187,6 +189,9 @@ export default function VerticalWorkspacePage() {
     const [dfdData, setDfdData] = useState<DfdData | null>(null);
     const [dfdHtml, setDfdHtml] = useState<string | null>(null);
     const [dfdLoading, setDfdLoading] = useState(true);
+    const [dfdJsonString, setDfdJsonString] = useState<string>("");
+    const [savingDfd, setSavingDfd] = useState(false);
+    const [jsonEditorOpen, setJsonEditorOpen] = useState(false);
     const [downloadingFiles, setDownloadingFiles] = useState<Set<string>>(new Set());
     const [activeTab, setActiveTab] = useState("sessions");
 
@@ -238,7 +243,10 @@ export default function VerticalWorkspacePage() {
 
     const fetchVertical = useCallback(async () => {
         const res = await fetch(`/api/verticals/${verticalId}`);
-        if (res.ok) setVertical(await res.json());
+        if (res.ok) {
+            const data = await res.json();
+            setVertical(data.success ? data.data : data);
+        }
         setLoading(false);
     }, [verticalId]);
 
@@ -270,6 +278,7 @@ export default function VerticalWorkspacePage() {
                 // DFD JSON & HTML
                 if (data.dfd_json) {
                     setDfdData(data.dfd_json);
+                    setDfdJsonString(JSON.stringify(data.dfd_json, null, 2));
                 }
                 if (data.interactive_html) {
                     setDfdHtml(data.interactive_html);
@@ -344,6 +353,7 @@ export default function VerticalWorkspacePage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     verticalId,
+                    interviewerNames: [],
                     intervieweeNames: newForm.intervieweeNames
                         .split(",")
                         .map((n) => n.trim())
@@ -352,7 +362,7 @@ export default function VerticalWorkspacePage() {
                         .split(",")
                         .map((r) => r.trim())
                         .filter(Boolean),
-                    rawTextNotes: newForm.rawTextNotes || null,
+                    rawTextNotes: newForm.rawTextNotes || undefined,
                     assessmentCriteriaTags: newForm.selectedTags,
                 }),
             });
@@ -363,7 +373,8 @@ export default function VerticalWorkspacePage() {
                 return;
             }
 
-            const session = await res.json();
+            const responseData = await res.json();
+            const session = responseData.data || responseData;
 
             // 2. Upload files if any
             if (uploadFiles.length > 0) {
@@ -432,13 +443,70 @@ export default function VerticalWorkspacePage() {
         }
     };
 
+    const handleRevertToDraft = async (sessionId: string) => {
+        const res = await fetch(`/api/sessions/${sessionId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "draft" }),
+        });
+        if (res.ok) {
+            toast.success("Session reverted to draft");
+            fetchVertical();
+        } else {
+            toast.error("Failed to revert session to draft");
+        }
+    };
+
+    const handleSaveDfd = async () => {
+        try {
+            const parsedNode = JSON.parse(dfdJsonString);
+            setSavingDfd(true);
+            const res = await fetch(`/api/verticals/${verticalId}/pipeline/results`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ dfd_json: parsedNode }),
+            });
+            if (res.ok) {
+                toast.success("DFD JSON saved successfully");
+                setDfdData(parsedNode);
+            } else {
+                toast.error("Failed to save DFD JSON");
+            }
+        } catch (e) {
+            toast.error("Invalid JSON format");
+        } finally {
+            setSavingDfd(false);
+        }
+    };
+
+    const handleDeleteFile = async (sessionId: string, fileId: string, fileName: string) => {
+        if (!confirm(`Are you sure you want to delete ${fileName}?`)) return;
+        setDownloadingFiles(prev => new Set(prev).add(fileId + "_del"));
+        try {
+            const res = await fetch(`/api/sessions/${sessionId}/files/${fileId}`, { method: "DELETE" });
+            if (res.ok) {
+                toast.success("File deleted successfully");
+                fetchVertical();
+            } else {
+                toast.error("Failed to delete file");
+            }
+        } catch {
+            toast.error("Error deleting file");
+        } finally {
+            setDownloadingFiles(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(fileId + "_del");
+                return newSet;
+            });
+        }
+    };
+
     const confirmDeleteSession = async () => {
         if (!sessionToDelete) return;
 
         setDeletingSession(true);
         try {
-            // Clean up Docker background records silently
-            await fetch(`/api/sessions/${sessionToDelete}/dfd`, { method: "DELETE" }).catch(console.error);
+            // (DFD records are removed automatically if tied to the session in the backend pipeline)
 
             const res = await fetch(`/api/sessions/${sessionToDelete}`, {
                 method: "DELETE",
@@ -487,9 +555,9 @@ export default function VerticalWorkspacePage() {
             await fetch(`/api/verticals/${verticalId}/pipeline`, {
                 method: "DELETE"
             });
-            
+
             toast.loading("Initiating unified pipeline in background...", { id: toastId });
-            
+
             const payload = {
                 use_rlm: selectedMode === "rlm",
                 processing_mode: selectedMode === "aggressive" ? "aggressive_processing" : selectedMode === "normal" ? "standard_processing" : null
@@ -559,32 +627,25 @@ export default function VerticalWorkspacePage() {
         );
     }
 
-    const finalizedSessions = vertical.sessions.filter((s) => s.status === "finalized");
-    const draftSessions = vertical.sessions.filter((s) => s.status === "draft");
+    const finalizedSessions = (vertical.sessions || []).filter((s) => s.status === "finalized");
+    const draftSessions = (vertical.sessions || []).filter((s) => s.status === "draft");
     const hasFinalizedSessions = finalizedSessions.length > 0;
     const hasDataMatrix = matrixRows.length > 0;
-    const totalFiles = vertical.sessions.reduce((sum, s) => sum + s._count.files, 0);
-    const allTags = new Set(vertical.sessions.flatMap((s) => s.assessmentCriteriaTags));
+    const totalFiles = (vertical.sessions || []).reduce((sum, s) => sum + (s._count?.files || 0), 0);
+    const allTags = new Set((vertical.sessions || []).flatMap((s) => s.assessmentCriteriaTags));
     const criteriaCoverage = Math.round((allTags.size / allCriteria.length) * 100);
 
     const filteredSessions =
         sessionFilter === "all"
-            ? vertical.sessions
-            : vertical.sessions.filter((s) => s.status === sessionFilter);
+            ? (vertical.sessions || [])
+            : (vertical.sessions || []).filter((s) => s.status === sessionFilter);
 
     return (
         <div className="space-y-6 min-w-0 overflow-hidden">
             {/* Breadcrumb */}
             <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-                <Link href="/dashboard/orgs" className="hover:text-foreground transition-colors">
-                    Organizations
-                </Link>
-                <span>/</span>
-                <Link
-                    href={`/dashboard/orgs/${vertical.project.organization.id}`}
-                    className="hover:text-foreground transition-colors"
-                >
-                    {vertical.project.organization.name}
+                <Link href="/dashboard/projects" className="hover:text-foreground transition-colors">
+                    Projects
                 </Link>
                 <span>/</span>
                 <Link
@@ -601,18 +662,24 @@ export default function VerticalWorkspacePage() {
             <div className="flex items-start justify-between">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight">{vertical.name}</h1>
-                    {vertical.headName && (
-                        <p className="text-muted-foreground mt-1">
-                            Head: {vertical.headName}
-                            {vertical.headRole ? ` (${vertical.headRole})` : ""}
-                        </p>
-                    )}
+                    <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
+                        <span>Sessions Limit: {(vertical.sessions || []).length} / {vertical.sessionRunLimit}</span>
+                        {vertical.headName && (
+                            <>
+                                <span>•</span>
+                                <span>
+                                    Head: {vertical.headName}
+                                    {vertical.headRole ? ` (${vertical.headRole})` : ""}
+                                </span>
+                            </>
+                        )}
+                    </div>
                 </div>
             </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
                 <TabsList>
-                    <TabsTrigger value="sessions">Sessions ({vertical.sessions.length})</TabsTrigger>
+                    <TabsTrigger value="sessions">Sessions ({(vertical.sessions || []).length})</TabsTrigger>
                     <TabsTrigger value="matrix">Data Matrix</TabsTrigger>
 
                     <TabsTrigger value="dfd">DFD</TabsTrigger>
@@ -626,7 +693,7 @@ export default function VerticalWorkspacePage() {
                         <Card className="py-3">
                             <CardContent className="px-4 py-0">
                                 <p className="text-xs text-muted-foreground">Total Sessions</p>
-                                <p className="text-2xl font-bold">{vertical.sessions.length}</p>
+                                <p className="text-2xl font-bold">{(vertical.sessions || []).length}</p>
                             </CardContent>
                         </Card>
                         <Card className="py-3">
@@ -702,7 +769,7 @@ export default function VerticalWorkspacePage() {
                                         : "text-muted-foreground hover:text-foreground"
                                         }`}
                                 >
-                                    {filter === "all" ? `All (${vertical.sessions.length})` :
+                                    {filter === "all" ? `All (${(vertical.sessions || []).length})` :
                                         filter === "finalized" ? `Finalized (${finalizedSessions.length})` :
                                             `Drafts (${draftSessions.length})`}
                                 </button>
@@ -722,12 +789,12 @@ export default function VerticalWorkspacePage() {
 
                             <Dialog open={newDialogOpen} onOpenChange={setNewDialogOpen}>
                                 <DialogTrigger asChild>
-                                    <Button>
+                                    <Button disabled={(vertical.sessions || []).length >= vertical.sessionRunLimit}>
                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 mr-2">
                                             <path d="M5 12h14" />
                                             <path d="M12 5v14" />
                                         </svg>
-                                        New Session
+                                        {(vertical.sessions || []).length >= vertical.sessionRunLimit ? "Session Limit Reached" : "New Session"}
                                     </Button>
                                 </DialogTrigger>
                                 <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
@@ -1013,6 +1080,23 @@ export default function VerticalWorkspacePage() {
                                                             </svg>
                                                         </Button>
                                                     )}
+                                                    {session.status === "finalized" && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-8 w-8 text-amber-500"
+                                                            title="Revert to draft"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleRevertToDraft(session.id);
+                                                            }}
+                                                        >
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                                                                <path d="M9 14 4 9l5-5" />
+                                                                <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" />
+                                                            </svg>
+                                                        </Button>
+                                                    )}
                                                     {session._count.files > 0 && (
                                                         <span className="flex items-center gap-1 text-xs text-muted-foreground ml-1">
                                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3">
@@ -1135,6 +1219,23 @@ export default function VerticalWorkspacePage() {
                                                                                 </>
                                                                             )}
                                                                         </Button>
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            size="icon"
+                                                                            className="h-8 w-8 text-muted-foreground hover:text-destructive transition-colors"
+                                                                            title="Delete File"
+                                                                            disabled={downloadingFiles.has(file.id + "_del")}
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                handleDeleteFile(session.id, file.id, file.fileName);
+                                                                            }}
+                                                                        >
+                                                                            {downloadingFiles.has(file.id + "_del") ? (
+                                                                                <svg className="w-4 h-4 animate-spin text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /><path d="M9 12l2 2 4-4" /></svg>
+                                                                            ) : (
+                                                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
+                                                                            )}
+                                                                        </Button>
                                                                     </div>
                                                                 </div>
                                                             ))}
@@ -1160,66 +1261,83 @@ export default function VerticalWorkspacePage() {
                             <Skeleton className="h-10 w-full" />
                         </div>
                     ) : matrixRows.length > 0 ? (
-                        <Card>
-                            <CardHeader>
+                        <Collapsible
+                            open={matrixOpen}
+                            onOpenChange={setMatrixOpen}
+                            className="bg-card text-card-foreground shadow-sm rounded-xl border border-border mt-4"
+                        >
+                            <div className="flex flex-col space-y-1.5 p-6 pb-4">
                                 <div className="flex items-center justify-between">
-                                    <div>
-                                        <CardTitle className="text-xl">1. Data Mapping & Inventory Rows</CardTitle>
-                                        <CardDescription>{matrixRows.length} data categories identified</CardDescription>
+                                    <div className="flex items-center gap-3">
+                                        <CollapsibleTrigger asChild>
+                                            <Button variant="ghost" size="sm" className="w-9 p-0 hover:bg-muted/50 rounded-md transition-transform duration-200">
+                                                {matrixOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                                <span className="sr-only">Toggle</span>
+                                            </Button>
+                                        </CollapsibleTrigger>
+                                        <div>
+                                            <h3 className="text-xl font-semibold leading-none tracking-tight">1. Data Mapping & Inventory Rows</h3>
+                                            <p className="text-sm text-muted-foreground mt-1.5">{matrixRows.length} data categories identified</p>
+                                        </div>
                                     </div>
-                                    <Button
-                                        onClick={handleGenerateMatrix}
-                                        disabled={generatingPipeline}
-                                    >
-                                        {generatingPipeline ? "Generating..." : "Generate Matrix & Schema"}
-                                    </Button>
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            onClick={handleGenerateMatrix}
+                                            disabled={generatingPipeline}
+                                            size="sm"
+                                        >
+                                            {generatingPipeline ? "Generating..." : "Generate Matrix & Schema"}
+                                        </Button>
+                                    </div>
                                 </div>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="overflow-x-auto rounded-lg border max-w-full">
-                                    <table className="w-full min-w-max text-sm">
-                                        <thead>
-                                            <tr className="bg-muted/50">
-                                                <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">S.No</th>
-                                                <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Data Category</th>
-                                                <th className="px-4 py-3 text-left font-semibold">Description</th>
-                                                <th className="px-4 py-3 text-left font-semibold">Purpose</th>
-                                                <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Data Owner</th>
-                                                <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Storage Location</th>
-                                                <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Data Classification</th>
-                                                <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Retention Period</th>
-                                                <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Legal Basis</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {matrixRows.map((row, idx) => (
-                                                <tr key={row.id} className={idx % 2 === 0 ? "bg-background" : "bg-muted/20"}>
-                                                    <td className="px-4 py-3 font-medium">{row.sNo}</td>
-                                                    <td className="px-4 py-3 font-medium">{row.dataCategory}</td>
-                                                    <td className="px-4 py-3 break-words">{row.description}</td>
-                                                    <td className="px-4 py-3 break-words">{row.purpose}</td>
-                                                    <td className="px-4 py-3">{row.dataOwner}</td>
-                                                    <td className="px-4 py-3">{row.storageLocation}</td>
-                                                    <td className="px-4 py-3">
-                                                        <Badge variant={
-                                                            row.dataClassification.toLowerCase().includes("pii") || row.dataClassification.toLowerCase().includes("sensitive")
-                                                                ? "destructive"
-                                                                : row.dataClassification.toLowerCase().includes("confidential")
-                                                                    ? "default"
-                                                                    : "secondary"
-                                                        }>
-                                                            {row.dataClassification}
-                                                        </Badge>
-                                                    </td>
-                                                    <td className="px-4 py-3">{row.retentionPeriod}</td>
-                                                    <td className="px-4 py-3">{row.legalBasis}</td>
+                            </div>
+                            <CollapsibleContent>
+                                <div className="p-6 pt-0">
+                                    <div className="overflow-x-auto rounded-lg border max-w-full">
+                                        <table className="w-full min-w-max text-sm">
+                                            <thead>
+                                                <tr className="bg-muted/50">
+                                                    <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">S.No</th>
+                                                    <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Data Category</th>
+                                                    <th className="px-4 py-3 text-left font-semibold">Description</th>
+                                                    <th className="px-4 py-3 text-left font-semibold">Purpose</th>
+                                                    <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Data Owner</th>
+                                                    <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Storage Location</th>
+                                                    <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Data Classification</th>
+                                                    <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Retention Period</th>
+                                                    <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Legal Basis</th>
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                            </thead>
+                                            <tbody>
+                                                {matrixRows.map((row, idx) => (
+                                                    <tr key={row.id} className={idx % 2 === 0 ? "bg-background" : "bg-muted/20"}>
+                                                        <td className="px-4 py-3 font-medium">{row.sNo}</td>
+                                                        <td className="px-4 py-3 font-medium">{row.dataCategory}</td>
+                                                        <td className="px-4 py-3 break-words">{row.description}</td>
+                                                        <td className="px-4 py-3 break-words">{row.purpose}</td>
+                                                        <td className="px-4 py-3">{row.dataOwner}</td>
+                                                        <td className="px-4 py-3">{row.storageLocation}</td>
+                                                        <td className="px-4 py-3">
+                                                            <Badge variant={
+                                                                row.dataClassification.toLowerCase().includes("pii") || row.dataClassification.toLowerCase().includes("sensitive")
+                                                                    ? "destructive"
+                                                                    : row.dataClassification.toLowerCase().includes("confidential")
+                                                                        ? "default"
+                                                                        : "secondary"
+                                                            }>
+                                                                {row.dataClassification}
+                                                            </Badge>
+                                                        </td>
+                                                        <td className="px-4 py-3">{row.retentionPeriod}</td>
+                                                        <td className="px-4 py-3">{row.legalBasis}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
-                            </CardContent>
-                        </Card>
+                            </CollapsibleContent>
+                        </Collapsible>
                     ) : (
                         <Card className="border-dashed">
                             <CardContent className="flex flex-col items-center justify-center py-12">
@@ -1242,322 +1360,391 @@ export default function VerticalWorkspacePage() {
                         </Card>
                     )}
 
-                    {/* ────────────── Schema Content ────────────── */}
-                    <div className="pt-8 border-t">
-                        <h2 className="text-xl font-bold mb-6">2. Schema-1 Data Model Graph</h2>
-                        {schemaLoading ? (
-                            <div className="flex items-center justify-center py-12">
-                                <p className="text-muted-foreground">Loading Schema-1 data...</p>
-                            </div>
-                        ) : !schemaOne || !schemaOne.nodes || schemaOne.nodes.length === 0 ? (
-                            <Card>
-                                <CardContent className="flex flex-col items-center justify-center py-16">
-                                    <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4">
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-muted-foreground">
-                                            <circle cx="12" cy="12" r="10" /><path d="m9 12 2 2 4-4" />
-                                        </svg>
+                    {/* ────────────── DFD JSON Editor ────────────── */}
+                    <Collapsible
+                        open={jsonEditorOpen}
+                        onOpenChange={setJsonEditorOpen}
+                        className="bg-card text-card-foreground shadow-sm rounded-xl border border-border mt-8"
+                    >
+                        <div className="flex flex-col space-y-1.5 p-6 pb-4 border-b">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <CollapsibleTrigger asChild>
+                                        <Button variant="ghost" size="sm" className="w-9 p-0 hover:bg-muted/50 rounded-md transition-transform duration-200">
+                                            {jsonEditorOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                            <span className="sr-only">Toggle JSON Editor</span>
+                                        </Button>
+                                    </CollapsibleTrigger>
+                                    <div>
+                                        <h2 className="text-xl font-bold">2. Editable DFD JSON</h2>
+                                        <p className="text-sm text-muted-foreground mt-1">Modify the underlying nodes safely.</p>
                                     </div>
-                                    <h3 className="text-lg font-semibold mb-1">No Schema-1 Nodes Yet</h3>
-                                    <p className="text-muted-foreground text-sm mb-4 text-center max-w-sm">
-                                        Generate the Data Matrix first. Schema-1 is created during that process.
-                                    </p>
-                                </CardContent>
-                            </Card>
-                        ) : (() => {
-                            const entities = schemaOne.nodes.filter(n => n.type === "EXTERNAL_ENTITY");
-                            const processes = schemaOne.nodes.filter(n => n.type === "PROCESS");
-                            const stores = schemaOne.nodes.filter(n => n.type === "DATA_STORE");
+                                </div>
+                                <Button
+                                    onClick={handleSaveDfd}
+                                    disabled={savingDfd || !dfdData}
+                                    size="sm"
+                                >
+                                    {savingDfd ? "Saving..." : "Save Modifications"}
+                                </Button>
+                            </div>
+                        </div>
+                        <CollapsibleContent>
+                            <div className="p-6">
+                                {dfdData ? (
+                                    <Textarea
+                                        value={dfdJsonString}
+                                        onChange={(e) => setDfdJsonString(e.target.value)}
+                                        className="font-mono text-sm min-h-[400px]"
+                                        placeholder="{}"
+                                    />
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center py-12 border-dashed border-2 rounded-lg bg-slate-50">
+                                        <Activity className="w-12 h-12 text-slate-300 mb-4" />
+                                        <h3 className="text-lg font-medium text-slate-600">No DFD JSON Available</h3>
+                                        <p className="text-sm text-slate-500 mt-1 max-w-sm text-center">
+                                            Generate the Data Matrix to create the underlying DFD JSON structure first.
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        </CollapsibleContent>
+                    </Collapsible>
 
-                            const nodeLabel = (id: string) => {
-                                const node = schemaOne.nodes.find(n => n.id === id);
-                                return node?.name || id;
-                            };
-
-                            const classificationColor = (c?: string) => {
-                                switch (c) {
-                                    case "Special Category": return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
-                                    case "PII/Sensitive": return "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400";
-                                    case "Confidential": return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
-                                    case "Internal": return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400";
-                                    case "Public": return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
-                                    default: return "bg-muted text-muted-foreground";
-                                }
-                            };
-
-                            const typeIcon = (type: string) => {
-                                switch (type) {
-                                    case "EXTERNAL_ENTITY": return "👤";
-                                    case "PROCESS": return "⚙️";
-                                    case "DATA_STORE": return "🗄️";
-                                    default: return "📦";
-                                }
-                            };
-
-                            const renderNodeCard = (node: SchemaNode) => {
-                                const des = node.data_elements || [];
-                                const hasSensitive = des.some(
-                                    de => de.classification === "PII/Sensitive" || de.classification === "Special Category"
-                                );
-                                return (
-                                    <Card key={node.id} className={hasSensitive ? "border-orange-200 dark:border-orange-800" : ""}>
-                                        <CardHeader className="pb-3">
-                                            <div className="flex items-start justify-between">
-                                                <div className="flex items-start gap-3">
-                                                    <span className="text-xl mt-0.5">{typeIcon(node.type)}</span>
-                                                    <div>
-                                                        <CardTitle className="text-base flex items-center gap-2 flex-wrap">
-                                                            {node.name}
-                                                            <Badge variant="outline" className="text-xs font-normal">
-                                                                {node.type.replace(/_/g, " ")}
-                                                            </Badge>
-                                                            {hasSensitive && (
-                                                                <span className="text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-2 py-0.5 rounded-full">
-                                                                    Contains Sensitive Data
-                                                                </span>
-                                                            )}
-                                                        </CardTitle>
-                                                        {node.description && (
-                                                            <p className="text-sm text-muted-foreground mt-1">{node.description}</p>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                <div className="flex gap-2 flex-shrink-0">
-                                                    {node.sla && node.sla !== "Not specified" && (
-                                                        <span className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-2 py-1 rounded-md font-medium">
-                                                            SLA: {node.sla}
-                                                        </span>
-                                                    )}
-                                                    <span className="text-xs bg-muted px-2 py-1 rounded-md">
-                                                        {des.length} data element{des.length !== 1 ? "s" : ""}
-                                                    </span>
-                                                </div>
+                    {/* ────────────── Schema Content ────────────── */}
+                    <Collapsible
+                        open={schemaOpen}
+                        onOpenChange={setSchemaOpen}
+                        className="bg-card text-card-foreground shadow-sm rounded-xl border border-border mt-8"
+                    >
+                        <div className="flex flex-col space-y-1.5 p-6 pb-4 border-b">
+                            <div className="flex items-center gap-3">
+                                <CollapsibleTrigger asChild>
+                                    <Button variant="ghost" size="sm" className="w-9 p-0 hover:bg-muted/50 rounded-md transition-transform duration-200">
+                                        {schemaOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                        <span className="sr-only">Toggle schema</span>
+                                    </Button>
+                                </CollapsibleTrigger>
+                                <h2 className="text-xl font-bold">3. Schema-1 Data Model Graph</h2>
+                            </div>
+                        </div>
+                        <CollapsibleContent>
+                            <div className="p-6">
+                                {schemaLoading ? (
+                                    <div className="flex items-center justify-center py-12">
+                                        <p className="text-muted-foreground">Loading Schema-1 data...</p>
+                                    </div>
+                                ) : !schemaOne || !schemaOne.nodes || schemaOne.nodes.length === 0 ? (
+                                    <Card>
+                                        <CardContent className="flex flex-col items-center justify-center py-16">
+                                            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4">
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-muted-foreground">
+                                                    <circle cx="12" cy="12" r="10" /><path d="m9 12 2 2 4-4" />
+                                                </svg>
                                             </div>
-                                        </CardHeader>
-                                        <CardContent className="pt-0 space-y-4">
-                                            {/* Data Elements Table */}
-                                            {des.length > 0 && (
-                                                <div>
-                                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Data Elements</p>
-                                                    <div className="rounded-lg border overflow-hidden">
-                                                        <table className="w-full text-xs">
-                                                            <thead>
-                                                                <tr className="bg-muted/50">
-                                                                    <th className="text-left p-2 font-medium">Name</th>
-                                                                    <th className="text-left p-2 font-medium">Classification</th>
-                                                                    <th className="text-left p-2 font-medium hidden md:table-cell">Purpose</th>
-                                                                    <th className="text-left p-2 font-medium hidden lg:table-cell">Retention</th>
-                                                                    <th className="text-left p-2 font-medium hidden lg:table-cell">Legal Basis</th>
-                                                                    <th className="text-left p-2 font-medium hidden xl:table-cell">Owner</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                {des.map((de, i) => (
-                                                                    <tr key={i} className="border-t">
-                                                                        <td className="p-2">
-                                                                            <span className="font-medium">{de.name}</span>
-                                                                            {de.description && (
-                                                                                <p className="text-muted-foreground mt-0.5">{de.description}</p>
-                                                                            )}
-                                                                        </td>
-                                                                        <td className="p-2">
-                                                                            <span className={`px-1.5 py-0.5 rounded text-xs ${classificationColor(de.classification)}`}>
-                                                                                {de.classification || "—"}
-                                                                            </span>
-                                                                        </td>
-                                                                        <td className="p-2 hidden md:table-cell text-muted-foreground">{de.purpose || "—"}</td>
-                                                                        <td className="p-2 hidden lg:table-cell text-muted-foreground">{de.retention_period || "—"}</td>
-                                                                        <td className="p-2 hidden lg:table-cell text-muted-foreground">{de.legal_basis || "—"}</td>
-                                                                        <td className="p-2 hidden xl:table-cell text-muted-foreground">{de.owner || "—"}</td>
-                                                                    </tr>
-                                                                ))}
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Sub-Processes (PROCESS only) */}
-                                            {node.sub_processes && node.sub_processes.length > 0 && (
-                                                <div>
-                                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Sub-Processes / Branches</p>
-                                                    <div className="space-y-2">
-                                                        {node.sub_processes.map((sp, i) => (
-                                                            <div key={i} className="bg-muted/50 rounded-lg p-3 text-sm">
-                                                                <div className="flex items-start justify-between">
-                                                                    <div>
-                                                                        <p className="font-medium">{sp.name}</p>
-                                                                        {sp.description && (
-                                                                            <p className="text-muted-foreground text-xs mt-0.5">{sp.description}</p>
-                                                                        )}
-                                                                    </div>
-                                                                    {sp.routing && sp.routing !== "Not specified" && (
-                                                                        <span className="text-xs bg-background px-2 py-0.5 rounded border flex-shrink-0 ml-2">
-                                                                            → {sp.routing}
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Integrations (DATA_STORE only) */}
-                                            {node.integrations && node.integrations.length > 0 && (
-                                                <div>
-                                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Integrations</p>
-                                                    <div className="space-y-1">
-                                                        {node.integrations.map((integ, i) => (
-                                                            <div key={i} className="flex items-center justify-between text-xs bg-muted/50 rounded px-3 py-2">
-                                                                <span className="font-medium">{integ.system}</span>
-                                                                <span className="text-muted-foreground">
-                                                                    {integ.type && integ.type !== "Not specified" ? integ.type : ""}
-                                                                    {integ.direction && integ.direction !== "Not specified" ? ` · ${integ.direction}` : ""}
-                                                                </span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Reference Documents */}
-                                            {node.reference_documents && node.reference_documents.length > 0 && (
-                                                <div>
-                                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Reference Documents</p>
-                                                    <div className="flex flex-wrap gap-1">
-                                                        {node.reference_documents.map((doc, i) => (
-                                                            <span key={i} className="text-xs bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 px-2 py-0.5 rounded">
-                                                                {doc}
-                                                            </span>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
+                                            <h3 className="text-lg font-semibold mb-1">No Schema-1 Nodes Yet</h3>
+                                            <p className="text-muted-foreground text-sm mb-4 text-center max-w-sm">
+                                                Generate the Data Matrix first. Schema-1 is created during that process.
+                                            </p>
                                         </CardContent>
                                     </Card>
-                                );
-                            };
+                                ) : (() => {
+                                    const entities = schemaOne.nodes.filter(n => n.type === "EXTERNAL_ENTITY");
+                                    const processes = schemaOne.nodes.filter(n => n.type === "PROCESS");
+                                    const stores = schemaOne.nodes.filter(n => n.type === "DATA_STORE");
 
-                            return (
-                                <div className="space-y-6">
-                                    {/* Summary Header */}
-                                    <div className="flex items-center gap-4 flex-wrap">
-                                        <div className="flex items-center gap-2 text-sm">
-                                            <span className="text-muted-foreground">Entities:</span>
-                                            <Badge variant="secondary">{entities.length}</Badge>
-                                        </div>
-                                        <div className="flex items-center gap-2 text-sm">
-                                            <span className="text-muted-foreground">Processes:</span>
-                                            <Badge variant="secondary">{processes.length}</Badge>
-                                        </div>
-                                        <div className="flex items-center gap-2 text-sm">
-                                            <span className="text-muted-foreground">Data Stores:</span>
-                                            <Badge variant="secondary">{stores.length}</Badge>
-                                        </div>
-                                        <div className="flex items-center gap-2 text-sm">
-                                            <span className="text-muted-foreground">Flows:</span>
-                                            <Badge variant="secondary">{(schemaOne.flows || []).length}</Badge>
-                                        </div>
-                                        {schemaOne.meta?.generated_at && (
-                                            <span className="text-xs text-muted-foreground ml-auto">
-                                                Generated: {new Date(schemaOne.meta.generated_at).toLocaleString()}
-                                            </span>
-                                        )}
-                                    </div>
+                                    const nodeLabel = (id: string) => {
+                                        const node = schemaOne.nodes.find(n => n.id === id);
+                                        return node?.name || id;
+                                    };
 
-                                    {/* External Entities */}
-                                    {entities.length > 0 && (
-                                        <div>
-                                            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">
-                                                👤 External Entities ({entities.length})
-                                            </h3>
-                                            <div className="grid gap-4">{entities.map(renderNodeCard)}</div>
-                                        </div>
-                                    )}
+                                    const classificationColor = (c?: string) => {
+                                        switch (c) {
+                                            case "Special Category": return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
+                                            case "PII/Sensitive": return "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400";
+                                            case "Confidential": return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
+                                            case "Internal": return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400";
+                                            case "Public": return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
+                                            default: return "bg-muted text-muted-foreground";
+                                        }
+                                    };
 
-                                    {/* Processes */}
-                                    {processes.length > 0 && (
-                                        <div>
-                                            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">
-                                                ⚙️ Processes ({processes.length})
-                                            </h3>
-                                            <div className="grid gap-4">{processes.map(renderNodeCard)}</div>
-                                        </div>
-                                    )}
+                                    const typeIcon = (type: string) => {
+                                        switch (type) {
+                                            case "EXTERNAL_ENTITY": return "👤";
+                                            case "PROCESS": return "⚙️";
+                                            case "DATA_STORE": return "🗄️";
+                                            default: return "📦";
+                                        }
+                                    };
 
-                                    {/* Data Stores */}
-                                    {stores.length > 0 && (
-                                        <div>
-                                            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">
-                                                🗄️ Data Stores ({stores.length})
-                                            </h3>
-                                            <div className="grid gap-4">{stores.map(renderNodeCard)}</div>
-                                        </div>
-                                    )}
+                                    const renderNodeCard = (node: SchemaNode) => {
+                                        const des = node.data_elements || [];
+                                        const hasSensitive = des.some(
+                                            de => de.classification === "PII/Sensitive" || de.classification === "Special Category"
+                                        );
+                                        return (
+                                            <Card key={node.id} className={`min-w-0 overflow-hidden ${hasSensitive ? "border-orange-200 dark:border-orange-800" : ""}`}>
+                                                <CardHeader className="pb-3 min-w-0">
+                                                    <div className="flex items-start justify-between">
+                                                        <div className="flex items-start gap-3">
+                                                            <span className="text-xl mt-0.5">{typeIcon(node.type)}</span>
+                                                            <div>
+                                                                <CardTitle className="text-base flex items-center gap-2 flex-wrap">
+                                                                    {node.name}
+                                                                    <Badge variant="outline" className="text-xs font-normal">
+                                                                        {node.type.replace(/_/g, " ")}
+                                                                    </Badge>
+                                                                    {hasSensitive && (
+                                                                        <span className="text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-2 py-0.5 rounded-full">
+                                                                            Contains Sensitive Data
+                                                                        </span>
+                                                                    )}
+                                                                </CardTitle>
+                                                                {node.description && (
+                                                                    <p className="text-sm text-muted-foreground mt-1">{node.description}</p>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex gap-2 flex-shrink-0">
+                                                            {node.sla && node.sla !== "Not specified" && (
+                                                                <span className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-2 py-1 rounded-md font-medium">
+                                                                    SLA: {node.sla}
+                                                                </span>
+                                                            )}
+                                                            <span className="text-xs bg-muted px-2 py-1 rounded-md">
+                                                                {des.length} data element{des.length !== 1 ? "s" : ""}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </CardHeader>
+                                                <CardContent className="pt-0 space-y-4">
+                                                    {/* Data Elements Table */}
+                                                    {des.length > 0 && (
+                                                        <div>
+                                                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Data Elements</p>
+                                                            <div className="rounded-lg border overflow-hidden">
+                                                                <table className="w-full text-xs">
+                                                                    <thead>
+                                                                        <tr className="bg-muted/50">
+                                                                            <th className="text-left p-2 font-medium">Name</th>
+                                                                            <th className="text-left p-2 font-medium">Classification</th>
+                                                                            <th className="text-left p-2 font-medium hidden md:table-cell">Purpose</th>
+                                                                            <th className="text-left p-2 font-medium hidden lg:table-cell">Retention</th>
+                                                                            <th className="text-left p-2 font-medium hidden lg:table-cell">Legal Basis</th>
+                                                                            <th className="text-left p-2 font-medium hidden xl:table-cell">Owner</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody>
+                                                                        {des.map((de, i) => (
+                                                                            <tr key={i} className="border-t">
+                                                                                <td className="p-2">
+                                                                                    <span className="font-medium">{de.name}</span>
+                                                                                    {de.description && (
+                                                                                        <p className="text-muted-foreground mt-0.5">{de.description}</p>
+                                                                                    )}
+                                                                                </td>
+                                                                                <td className="p-2">
+                                                                                    <span className={`px-1.5 py-0.5 rounded text-xs ${classificationColor(de.classification)}`}>
+                                                                                        {de.classification || "—"}
+                                                                                    </span>
+                                                                                </td>
+                                                                                <td className="p-2 hidden md:table-cell text-muted-foreground">{de.purpose || "—"}</td>
+                                                                                <td className="p-2 hidden lg:table-cell text-muted-foreground">{de.retention_period || "—"}</td>
+                                                                                <td className="p-2 hidden lg:table-cell text-muted-foreground">{de.legal_basis || "—"}</td>
+                                                                                <td className="p-2 hidden xl:table-cell text-muted-foreground">{de.owner || "—"}</td>
+                                                                            </tr>
+                                                                        ))}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        </div>
+                                                    )}
 
-                                    {/* Flows Table */}
-                                    {(schemaOne.flows || []).length > 0 && (
-                                        <div>
-                                            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">
-                                                🔀 Data Flows ({(schemaOne.flows || []).length})
-                                            </h3>
-                                            <Card className="overflow-hidden">
-                                                <div className="rounded-lg overflow-x-auto">
-                                                    <table className="w-full text-sm">
-                                                        <thead>
-                                                            <tr className="bg-muted/50 border-b">
-                                                                <th className="text-left p-3 font-medium">Source</th>
-                                                                <th className="text-left p-3 font-medium"></th>
-                                                                <th className="text-left p-3 font-medium">Target</th>
-                                                                <th className="text-left p-3 font-medium">Description</th>
-                                                                <th className="text-left p-3 font-medium hidden md:table-cell">Mechanism</th>
-                                                                <th className="text-left p-3 font-medium hidden lg:table-cell">Cross-Border</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {(schemaOne.flows || []).map((flow: any, i: number) => (
-                                                                <tr key={flow.id || i} className="border-t hover:bg-muted/30 transition-colors">
-                                                                    <td className="p-3 font-medium">{nodeLabel(flow.source)}</td>
-                                                                    <td className="p-3 text-muted-foreground">
-                                                                        {flow.bi_directional ? "⇄" : "→"}
-                                                                    </td>
-                                                                    <td className="p-3 font-medium">{nodeLabel(flow.target)}</td>
-                                                                    <td className="p-3 text-muted-foreground">
-                                                                        {flow.label}
-                                                                        {flow.data_elements && flow.data_elements.length > 0 && (
-                                                                            <div className="flex flex-wrap gap-1 mt-1">
-                                                                                {flow.data_elements.map((de: string, j: number) => (
-                                                                                    <span key={j} className="text-xs bg-muted px-1.5 py-0.5 rounded">{de}</span>
-                                                                                ))}
+                                                    {/* Sub-Processes (PROCESS only) */}
+                                                    {node.sub_processes && node.sub_processes.length > 0 && (
+                                                        <div>
+                                                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Sub-Processes / Branches</p>
+                                                            <div className="space-y-2">
+                                                                {node.sub_processes.map((sp, i) => (
+                                                                    <div key={i} className="bg-muted/50 rounded-lg p-3 text-sm">
+                                                                        <div className="flex items-start justify-between">
+                                                                            <div>
+                                                                                <p className="font-medium">{sp.name}</p>
+                                                                                {sp.description && (
+                                                                                    <p className="text-muted-foreground text-xs mt-0.5">{sp.description}</p>
+                                                                                )}
                                                                             </div>
-                                                                        )}
-                                                                    </td>
-                                                                    <td className="p-3 hidden md:table-cell text-muted-foreground">
-                                                                        {flow.transfer_mechanism && flow.transfer_mechanism !== "Not specified" ? flow.transfer_mechanism : "—"}
-                                                                    </td>
-                                                                    <td className="p-3 hidden lg:table-cell">
-                                                                        {flow.cross_border === true && (
-                                                                            <span className="text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-2 py-0.5 rounded">Yes</span>
-                                                                        )}
-                                                                        {flow.cross_border === false && (
-                                                                            <span className="text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-2 py-0.5 rounded">No</span>
-                                                                        )}
-                                                                        {(flow.cross_border === null || flow.cross_border === undefined) && (
-                                                                            <span className="text-xs text-muted-foreground">—</span>
-                                                                        )}
-                                                                    </td>
-                                                                </tr>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
+                                                                            {sp.routing && sp.routing !== "Not specified" && (
+                                                                                <span className="text-xs bg-background px-2 py-0.5 rounded border flex-shrink-0 ml-2">
+                                                                                    → {sp.routing}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Integrations (DATA_STORE only) */}
+                                                    {node.integrations && node.integrations.length > 0 && (
+                                                        <div>
+                                                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Integrations</p>
+                                                            <div className="space-y-1">
+                                                                {node.integrations.map((integ, i) => (
+                                                                    <div key={i} className="flex items-center justify-between text-xs bg-muted/50 rounded px-3 py-2">
+                                                                        <span className="font-medium">{integ.system}</span>
+                                                                        <span className="text-muted-foreground">
+                                                                            {integ.type && integ.type !== "Not specified" ? integ.type : ""}
+                                                                            {integ.direction && integ.direction !== "Not specified" ? ` · ${integ.direction}` : ""}
+                                                                        </span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Reference Documents */}
+                                                    {node.reference_documents && node.reference_documents.length > 0 && (
+                                                        <div>
+                                                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Reference Documents</p>
+                                                            <div className="flex flex-wrap gap-1">
+                                                                {node.reference_documents.map((doc, i) => (
+                                                                    <span key={i} className="text-xs bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 px-2 py-0.5 rounded">
+                                                                        {doc}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </CardContent>
                                             </Card>
+                                        );
+                                    };
+
+                                    return (
+                                        <div className="space-y-6">
+                                            {/* Summary Header */}
+                                            <div className="flex items-center gap-4 flex-wrap">
+                                                <div className="flex items-center gap-2 text-sm">
+                                                    <span className="text-muted-foreground">Entities:</span>
+                                                    <Badge variant="secondary">{entities.length}</Badge>
+                                                </div>
+                                                <div className="flex items-center gap-2 text-sm">
+                                                    <span className="text-muted-foreground">Processes:</span>
+                                                    <Badge variant="secondary">{processes.length}</Badge>
+                                                </div>
+                                                <div className="flex items-center gap-2 text-sm">
+                                                    <span className="text-muted-foreground">Data Stores:</span>
+                                                    <Badge variant="secondary">{stores.length}</Badge>
+                                                </div>
+                                                <div className="flex items-center gap-2 text-sm">
+                                                    <span className="text-muted-foreground">Flows:</span>
+                                                    <Badge variant="secondary">{(schemaOne.flows || []).length}</Badge>
+                                                </div>
+                                                {schemaOne.meta?.generated_at && (
+                                                    <span className="text-xs text-muted-foreground ml-auto">
+                                                        Generated: {new Date(schemaOne.meta.generated_at).toLocaleString()}
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {/* External Entities */}
+                                            {entities.length > 0 && (
+                                                <div>
+                                                    <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">
+                                                        👤 External Entities ({entities.length})
+                                                    </h3>
+                                                    <div className="grid gap-4">{entities.map(renderNodeCard)}</div>
+                                                </div>
+                                            )}
+
+                                            {/* Processes */}
+                                            {processes.length > 0 && (
+                                                <div>
+                                                    <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">
+                                                        ⚙️ Processes ({processes.length})
+                                                    </h3>
+                                                    <div className="grid gap-4">{processes.map(renderNodeCard)}</div>
+                                                </div>
+                                            )}
+
+                                            {/* Data Stores */}
+                                            {stores.length > 0 && (
+                                                <div>
+                                                    <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">
+                                                        🗄️ Data Stores ({stores.length})
+                                                    </h3>
+                                                    <div className="grid gap-4">{stores.map(renderNodeCard)}</div>
+                                                </div>
+                                            )}
+
+                                            {/* Flows Table */}
+                                            {(schemaOne.flows || []).length > 0 && (
+                                                <div>
+                                                    <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">
+                                                        🔀 Data Flows ({(schemaOne.flows || []).length})
+                                                    </h3>
+                                                    <Card className="overflow-hidden min-w-0">
+                                                        <div className="rounded-lg overflow-x-auto">
+                                                            <table className="w-full text-sm">
+                                                                <thead>
+                                                                    <tr className="bg-muted/50 border-b">
+                                                                        <th className="text-left p-3 font-medium">Source</th>
+                                                                        <th className="text-left p-3 font-medium"></th>
+                                                                        <th className="text-left p-3 font-medium">Target</th>
+                                                                        <th className="text-left p-3 font-medium">Description</th>
+                                                                        <th className="text-left p-3 font-medium hidden md:table-cell">Mechanism</th>
+                                                                        <th className="text-left p-3 font-medium hidden lg:table-cell">Cross-Border</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {(schemaOne.flows || []).map((flow: any, i: number) => (
+                                                                        <tr key={flow.id || i} className="border-t hover:bg-muted/30 transition-colors">
+                                                                            <td className="p-3 font-medium">{nodeLabel(flow.source)}</td>
+                                                                            <td className="p-3 text-muted-foreground">
+                                                                                {flow.bi_directional ? "⇄" : "→"}
+                                                                            </td>
+                                                                            <td className="p-3 font-medium">{nodeLabel(flow.target)}</td>
+                                                                            <td className="p-3 text-muted-foreground">
+                                                                                {flow.label}
+                                                                                {flow.data_elements && flow.data_elements.length > 0 && (
+                                                                                    <div className="flex flex-wrap gap-1 mt-1">
+                                                                                        {flow.data_elements.map((de: string, j: number) => (
+                                                                                            <span key={j} className="text-xs bg-muted px-1.5 py-0.5 rounded">{de}</span>
+                                                                                        ))}
+                                                                                    </div>
+                                                                                )}
+                                                                            </td>
+                                                                            <td className="p-3 hidden md:table-cell text-muted-foreground">
+                                                                                {flow.transfer_mechanism && flow.transfer_mechanism !== "Not specified" ? flow.transfer_mechanism : "—"}
+                                                                            </td>
+                                                                            <td className="p-3 hidden lg:table-cell">
+                                                                                {flow.cross_border === true && (
+                                                                                    <span className="text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-2 py-0.5 rounded">Yes</span>
+                                                                                )}
+                                                                                {flow.cross_border === false && (
+                                                                                    <span className="text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-2 py-0.5 rounded">No</span>
+                                                                                )}
+                                                                                {(flow.cross_border === null || flow.cross_border === undefined) && (
+                                                                                    <span className="text-xs text-muted-foreground">—</span>
+                                                                                )}
+                                                                            </td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </Card>
+                                                </div>
+                                            )}
                                         </div>
-                                    )}
-                                </div>
-                            );
-                        })()}
-                    </div>
+                                    );
+                                })()}
+                            </div>
+                        </CollapsibleContent>
+                    </Collapsible>
                 </TabsContent>
 
                 <TabsContent value="dfd" className="space-y-4 min-w-0 overflow-x-auto">
@@ -1573,8 +1760,8 @@ export default function VerticalWorkspacePage() {
                         </div>
                     ) : dfdHtml ? (
                         <div className="w-full relative min-h-[800px] h-[90vh] min-w-0 bg-white rounded-lg border overflow-hidden">
-                            <iframe 
-                                srcDoc={dfdHtml} 
+                            <iframe
+                                srcDoc={dfdHtml}
                                 className="w-full h-full border-none"
                                 title="Data Flow Diagram"
                                 sandbox="allow-scripts allow-same-origin"
@@ -1679,10 +1866,10 @@ export default function VerticalWorkspacePage() {
                     </DialogHeader>
                     <div className="py-4 space-y-4">
                         <label className="flex items-start space-x-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 border-slate-200 dark:border-slate-800">
-                            <input 
-                                type="radio" 
-                                name="processingMode" 
-                                value="rlm" 
+                            <input
+                                type="radio"
+                                name="processingMode"
+                                value="rlm"
                                 checked={selectedMode === "rlm"}
                                 onChange={() => setSelectedMode("rlm")}
                                 className="mt-1"
@@ -1693,10 +1880,10 @@ export default function VerticalWorkspacePage() {
                             </div>
                         </label>
                         <label className="flex items-start space-x-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 border-slate-200 dark:border-slate-800">
-                            <input 
-                                type="radio" 
-                                name="processingMode" 
-                                value="aggressive" 
+                            <input
+                                type="radio"
+                                name="processingMode"
+                                value="aggressive"
                                 checked={selectedMode === "aggressive"}
                                 onChange={() => setSelectedMode("aggressive")}
                                 className="mt-1"
@@ -1707,10 +1894,10 @@ export default function VerticalWorkspacePage() {
                             </div>
                         </label>
                         <label className="flex items-start space-x-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 border-slate-200 dark:border-slate-800">
-                            <input 
-                                type="radio" 
-                                name="processingMode" 
-                                value="normal" 
+                            <input
+                                type="radio"
+                                name="processingMode"
+                                value="normal"
                                 checked={selectedMode === "normal"}
                                 onChange={() => setSelectedMode("normal")}
                                 className="mt-1"

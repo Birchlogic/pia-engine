@@ -1,0 +1,232 @@
+name: Deploy to AWS Lambda
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: pia-engine
+  LAMBDA_FUNCTION: pia-engine
+  LAMBDA_ROLE_NAME: pia-engine-lambda-role
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    steps:
+      # ─── 1. Checkout code ───
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ─── 2. Configure AWS credentials ───
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # ─── 3. Login to ECR ───
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # ─── 4. Ensure ECR repository exists ───
+      - name: Ensure ECR Repository
+        run: |
+          aws ecr describe-repositories \
+            --repository-names "$ECR_REPOSITORY" \
+            --region "$AWS_REGION" 2>/dev/null || \
+          aws ecr create-repository \
+            --repository-name "$ECR_REPOSITORY" \
+            --region "$AWS_REGION" \
+            --image-scanning-configuration scanOnPush=true
+
+      # ─── 5. Build, tag, and push Docker image ───
+      - name: Build & Push Docker Image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
+          S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+          S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+          S3_REGION: ${{ secrets.S3_REGION }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+          NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          FULL_IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY"
+
+          docker build --platform linux/amd64 --provenance=false \
+            --build-arg DATABASE_URL="$DATABASE_URL" \
+            --build-arg NEXT_PUBLIC_SUPABASE_URL="$NEXT_PUBLIC_SUPABASE_URL" \
+            --build-arg SUPABASE_SERVICE_ROLE_KEY="$SUPABASE_SERVICE_ROLE_KEY" \
+            --build-arg S3_ENDPOINT="$S3_ENDPOINT" \
+            --build-arg S3_ACCESS_KEY="$S3_ACCESS_KEY" \
+            --build-arg S3_SECRET_KEY="$S3_SECRET_KEY" \
+            --build-arg S3_BUCKET_NAME="$S3_BUCKET_NAME" \
+            --build-arg S3_REGION="$S3_REGION" \
+            --build-arg NEXTAUTH_SECRET="$NEXTAUTH_SECRET" \
+            --build-arg NEXTAUTH_URL="$NEXTAUTH_URL" \
+            --build-arg ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
+            -t "$FULL_IMAGE:$IMAGE_TAG" \
+            -t "$FULL_IMAGE:latest" \
+            .
+
+          docker push "$FULL_IMAGE:$IMAGE_TAG"
+          docker push "$FULL_IMAGE:latest"
+
+      # ─── 6. Ensure IAM role ───
+      - name: Ensure Lambda IAM Role
+        id: iam-role
+        run: |
+          ROLE_ARN=$(aws iam get-role --role-name "$LAMBDA_ROLE_NAME" \
+            --query 'Role.Arn' --output text 2>/dev/null || true)
+
+          if [ -z "$ROLE_ARN" ] || [ "$ROLE_ARN" = "None" ]; then
+            echo "Creating IAM role: $LAMBDA_ROLE_NAME"
+            TRUST_POLICY='{
+              "Version": "2012-10-17",
+              "Statement": [{
+                "Effect": "Allow",
+                "Principal": { "Service": "lambda.amazonaws.com" },
+                "Action": "sts:AssumeRole"
+              }]
+            }'
+            aws iam create-role \
+              --role-name "$LAMBDA_ROLE_NAME" \
+              --assume-role-policy-document "$TRUST_POLICY"
+
+            aws iam attach-role-policy \
+              --role-name "$LAMBDA_ROLE_NAME" \
+              --policy-arn "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+
+            ROLE_ARN=$(aws iam get-role --role-name "$LAMBDA_ROLE_NAME" \
+              --query 'Role.Arn' --output text)
+            echo "Waiting 10s for IAM propagation..."
+            sleep 10
+          fi
+
+          echo "role_arn=$ROLE_ARN" >> "$GITHUB_OUTPUT"
+
+      # ─── 7. Build Lambda env vars JSON ───
+      - name: Build Environment JSON
+        id: env-json
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
+          S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+          S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+          S3_REGION: ${{ secrets.S3_REGION }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+          NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SUPER_ADMIN_JWT_SECRET: ${{ secrets.SUPER_ADMIN_JWT_SECRET }}
+        run: |
+          python3 -c "
+          import json, os, sys
+          keys = [
+            'DATABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY',
+            'S3_ENDPOINT', 'S3_ACCESS_KEY', 'S3_SECRET_KEY', 'S3_BUCKET_NAME', 'S3_REGION',
+            'NEXTAUTH_SECRET', 'NEXTAUTH_URL', 'ANTHROPIC_API_KEY', 'SUPER_ADMIN_JWT_SECRET'
+          ]
+          env_vars = {k: os.environ.get(k, '') for k in keys if os.environ.get(k)}
+          json.dump({'Variables': env_vars}, sys.stdout)
+          " > /tmp/env-vars.json
+
+      # ─── 8. Create or update Lambda function ───
+      - name: Deploy Lambda Function
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          ROLE_ARN: ${{ steps.iam-role.outputs.role_arn }}
+        run: |
+          FULL_IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+
+          LAMBDA_EXISTS=$(aws lambda get-function \
+            --function-name "$LAMBDA_FUNCTION" \
+            --region "$AWS_REGION" 2>/dev/null && echo "yes" || echo "no")
+
+          if [ "$LAMBDA_EXISTS" = "no" ]; then
+            echo "Creating new Lambda function..."
+            aws lambda create-function \
+              --function-name "$LAMBDA_FUNCTION" \
+              --package-type Image \
+              --code "ImageUri=$FULL_IMAGE" \
+              --role "$ROLE_ARN" \
+              --timeout 30 \
+              --memory-size 1024 \
+              --environment "file:///tmp/env-vars.json" \
+              --architectures x86_64 \
+              --region "$AWS_REGION"
+
+            aws lambda wait function-active-v2 \
+              --function-name "$LAMBDA_FUNCTION" \
+              --region "$AWS_REGION"
+          else
+            echo "Updating existing Lambda function..."
+            aws lambda update-function-code \
+              --function-name "$LAMBDA_FUNCTION" \
+              --image-uri "$FULL_IMAGE" \
+              --region "$AWS_REGION"
+
+            aws lambda wait function-updated-v2 \
+              --function-name "$LAMBDA_FUNCTION" \
+              --region "$AWS_REGION"
+
+            aws lambda update-function-configuration \
+              --function-name "$LAMBDA_FUNCTION" \
+              --timeout 30 \
+              --memory-size 1024 \
+              --environment "file:///tmp/env-vars.json" \
+              --region "$AWS_REGION"
+
+            aws lambda wait function-updated-v2 \
+              --function-name "$LAMBDA_FUNCTION" \
+              --region "$AWS_REGION"
+          fi
+
+      # ─── 9. Ensure Function URL ───
+      - name: Ensure Function URL
+        run: |
+          FUNC_URL=$(aws lambda get-function-url-config \
+            --function-name "$LAMBDA_FUNCTION" \
+            --region "$AWS_REGION" \
+            --query 'FunctionUrl' --output text 2>/dev/null || true)
+
+          if [ -z "$FUNC_URL" ] || [ "$FUNC_URL" = "None" ]; then
+            aws lambda create-function-url-config \
+              --function-name "$LAMBDA_FUNCTION" \
+              --auth-type NONE \
+              --region "$AWS_REGION"
+
+            aws lambda add-permission \
+              --function-name "$LAMBDA_FUNCTION" \
+              --statement-id "FunctionURLAllowPublicAccess" \
+              --action "lambda:InvokeFunctionUrl" \
+              --principal "*" \
+              --function-url-auth-type NONE \
+              --region "$AWS_REGION" 2>/dev/null || true
+
+            FUNC_URL=$(aws lambda get-function-url-config \
+              --function-name "$LAMBDA_FUNCTION" \
+              --region "$AWS_REGION" \
+              --query 'FunctionUrl' --output text)
+          fi
+
+          echo "══════════════════════════════════════════"
+          echo "  ✅ Deployment complete!"
+          echo "  🌐 Function URL: $FUNC_URL"
+          echo "══════════════════════════════════════════"

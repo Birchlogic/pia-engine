@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/db/prisma";
 import { getCurrentUser, unauthorizedResponse } from "@/lib/auth/helpers";
-import { getSignedUrl } from "@/lib/supabase/client";
+import { getPresignedDownloadUrl, deleteFile } from "@/lib/storage/s3-client";
 
 export async function GET(
     request: Request,
@@ -28,17 +28,17 @@ export async function GET(
         return NextResponse.json({ error: "File not found" }, { status: 404 });
     }
 
-    // Check Supabase configuration
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    // Check S3 configuration
+    if (!process.env.S3_ENDPOINT || !process.env.S3_ACCESS_KEY) {
         return NextResponse.json(
-            { error: "File download is not configured. Please set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in your environment." },
+            { error: "File download is not configured. Please set S3_ENDPOINT and S3_ACCESS_KEY in your environment." },
             { status: 500 }
         );
     }
 
     try {
         // Generate signed URL (valid for 1 hour)
-        const signedUrl = await getSignedUrl(file.storagePath);
+        const signedUrl = await getPresignedDownloadUrl(file.storagePath);
 
         return NextResponse.json({
             id: file.id,
@@ -57,7 +57,7 @@ export async function GET(
         // Check if it's a bucket not found error
         if (err instanceof Error && err.message.includes("bucket") && err.message.includes("not found")) {
             return NextResponse.json(
-                { error: "Storage bucket 'session-files' not found. Please create it in your Supabase project." },
+                { error: "Storage bucket not found. Please create it in your MinIO/S3 project." },
                 { status: 500 }
             );
         }
@@ -95,9 +95,8 @@ export async function DELETE(
     }
 
     try {
-        // Delete from Supabase Storage
-        const { deleteFromSupabase } = await import("@/lib/supabase/client");
-        await deleteFromSupabase(file.storagePath);
+        // Delete from S3 storage
+        await deleteFile(file.storagePath);
 
         // Delete from database
         await prisma.sessionFile.delete({

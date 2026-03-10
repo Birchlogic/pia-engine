@@ -7,6 +7,19 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ─── Super Admin (separate from org users, API-only) ───
+
+model SuperAdmin {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("super_admins")
+}
+
+// ─── Multi-Tenant Core ───
+
 model User {
   id                   String             @id @default(uuid())
   email                String             @unique
@@ -14,6 +27,7 @@ model User {
   password             String
   role                 UserRole           @default(analyst)
   orgId                String?            @map("org_id")
+  isActive             Boolean            @default(true) @map("is_active")
   createdAt            DateTime           @default(now()) @map("created_at")
   updatedAt            DateTime           @updatedAt @map("updated_at")
   createdSessions      InterviewSession[] @relation("SessionCreatedBy")
@@ -22,7 +36,9 @@ model User {
   uploadedFiles        SessionFile[]      @relation("FileUploadedBy")
   organization         Organization?      @relation(fields: [orgId], references: [id])
   createdVerticals     Vertical[]         @relation("VerticalCreatedBy")
+  projectMemberships   ProjectMember[]
 
+  @@index([orgId])
   @@map("users")
 }
 
@@ -33,6 +49,7 @@ model Organization {
   jurisdiction    String?
   regulatoryScope String[]  @map("regulatory_scope")
   sizeBand        SizeBand? @map("size_band")
+  projectLimit    Int       @default(3) @map("project_limit")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
   createdById     String    @map("created_by")
@@ -44,23 +61,40 @@ model Organization {
 }
 
 model Project {
-  id                    String         @id @default(uuid())
-  orgId                 String         @map("org_id")
+  id                    String          @id @default(uuid())
+  orgId                 String          @map("org_id")
   name                  String
   description           String?
-  applicableRegulations String[]       @map("applicable_regulations")
-  assessmentType        AssessmentType @default(full_pia) @map("assessment_type")
-  targetCompletionDate  DateTime?      @map("target_completion_date")
-  status                ProjectStatus  @default(setup)
-  createdAt             DateTime       @default(now()) @map("created_at")
-  updatedAt             DateTime       @updatedAt @map("updated_at")
-  createdById           String         @map("created_by")
-  dfd_graphs            DfdGraph[]
-  creator               User           @relation("ProjectCreatedBy", fields: [createdById], references: [id])
-  organization          Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  applicableRegulations String[]        @map("applicable_regulations")
+  assessmentType        AssessmentType  @default(full_pia) @map("assessment_type")
+  targetCompletionDate  DateTime?       @map("target_completion_date")
+  status                ProjectStatus   @default(setup)
+  createdAt             DateTime        @default(now()) @map("created_at")
+  updatedAt             DateTime        @updatedAt @map("updated_at")
+  createdById           String          @map("created_by")
+  creator               User            @relation("ProjectCreatedBy", fields: [createdById], references: [id])
+  organization          Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
   verticals             Vertical[]
+  members               ProjectMember[]
 
+  @@index([orgId])
   @@map("projects")
+}
+
+// ─── Project Membership (many-to-many with roles) ───
+
+model ProjectMember {
+  id        String      @id @default(uuid())
+  projectId String      @map("project_id")
+  userId    String      @map("user_id")
+  role      ProjectRole @default(viewer)
+  createdAt DateTime    @default(now()) @map("created_at")
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([userId])
+  @@map("project_members")
 }
 
 model Vertical {
@@ -72,13 +106,12 @@ model Vertical {
   headRole         String?            @map("head_role")
   headContact      String?            @map("head_contact")
   assessmentStatus AssessmentStatus   @default(not_started) @map("assessment_status")
+  sessionRunLimit  Int                @default(3) @map("session_run_limit")
+  dfdOverride      Json?              @map("dfd_override")
   sortOrder        Int                @default(0) @map("sort_order")
   createdAt        DateTime           @default(now()) @map("created_at")
   updatedAt        DateTime           @updatedAt @map("updated_at")
   createdById      String             @map("created_by")
-  dataMappingRows  DataMappingRow[]
-  dataMatrix       DataMatrix?
-  dfdGraph         DfdGraph?
   sessions         InterviewSession[]
   creator          User               @relation("VerticalCreatedBy", fields: [createdById], references: [id])
   project          Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -132,58 +165,18 @@ model SessionFile {
   @@map("session_files")
 }
 
-model DataMatrix {
-  id            String   @id @default(uuid())
-  verticalId    String   @unique @map("vertical_id")
-  schemaOneJson Json     @map("schema_one_json")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-  vertical      Vertical @relation(fields: [verticalId], references: [id], onDelete: Cascade)
-
-  @@map("data_matrices")
-}
-
-model DataMappingRow {
-  id                 String   @id @default(uuid())
-  verticalId         String   @map("vertical_id")
-  sNo                Int      @map("s_no")
-  dataCategory       String   @map("data_category")
-  description        String
-  purpose            String
-  dataOwner          String   @map("data_owner")
-  storageLocation    String   @map("storage_location")
-  dataClassification String   @map("data_classification")
-  retentionPeriod    String   @map("retention_period")
-  legalBasis         String   @map("legal_basis")
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
-  vertical           Vertical @relation(fields: [verticalId], references: [id], onDelete: Cascade)
-
-  @@map("data_mapping_rows")
-}
-
-model DfdGraph {
-  id                        String    @id @default(uuid())
-  verticalId                String?   @unique @map("vertical_id")
-  mermaidCode               String?   @map("mermaid_code")
-  createdAt                 DateTime  @default(now()) @map("created_at")
-  updatedAt                 DateTime  @updatedAt @map("updated_at")
-  dfd_type                  DfdType   @default(vertical)
-  generated_from_matrix_ids String[]
-  graph_data                Json?
-  layout_config             Json?
-  project_id                String
-  status                    DfdStatus @default(draft)
-  projects                  Project   @relation(fields: [project_id], references: [id], onDelete: Cascade)
-  vertical                  Vertical? @relation(fields: [verticalId], references: [id], onDelete: Cascade)
-
-  @@map("dfd_graphs")
-}
+// ─── Enums ───
 
 enum UserRole {
   admin
   senior_assessor
   analyst
+}
+
+enum ProjectRole {
+  owner
+  editor
+  viewer
 }
 
 enum SizeBand {
@@ -238,14 +231,4 @@ enum TranscriptionStatus {
   processing
   completed
   failed
-}
-
-enum DfdStatus {
-  draft
-  approved
-}
-
-enum DfdType {
-  vertical
-  master
 }

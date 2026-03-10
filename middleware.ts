@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 
-const publicPaths = ["/login", "/api/auth"];
+const publicPaths = ["/login", "/api/auth", "/api/super-admin/login", "/api/super-admin/seed", "/super-admin"];
 
 export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
@@ -21,27 +21,25 @@ export async function middleware(request: NextRequest) {
         return NextResponse.next();
     }
 
-    // Check authentication
-    const secret = process.env.NEXTAUTH_SECRET;
-    if (!secret) {
-        console.error("[Middleware] CRITICAL: NEXTAUTH_SECRET is not set in environment variables!");
+    // Super Admin routes use their own JWT (verified in the route handlers)
+    if (pathname.startsWith("/api/super-admin")) {
+        return NextResponse.next();
     }
 
-    const token = await getToken({
-        req: request,
-        secret: secret,
-    });
+    // Check NextAuth authentication for all other routes
+    const secret = process.env.NEXTAUTH_SECRET;
+    if (!secret) {
+        console.error("[Middleware] CRITICAL: NEXTAUTH_SECRET is not set");
+        return NextResponse.redirect(new URL("/login", request.url));
+    }
 
-    const allCookies = request.cookies.getAll().map(c => c.name).join(", ");
-    console.log(`[Middleware] Debug Info:
-    - Path: ${pathname}
-    - Secret Configured: ${!!secret}
-    - Cookies Present: ${allCookies}
-    - Token Retrieved: ${!!token}
-    `);
+    const token = await getToken({ req: request, secret });
 
     if (!token) {
-        console.log("[Middleware] No token found, redirecting to login");
+        // API routes get a 401, page routes get redirected
+        if (pathname.startsWith("/api/")) {
+            return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+        }
         const loginUrl = new URL("/login", request.url);
         loginUrl.searchParams.set("callbackUrl", pathname);
         return NextResponse.redirect(loginUrl);

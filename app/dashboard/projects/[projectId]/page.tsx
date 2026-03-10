@@ -3,12 +3,15 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
     Dialog,
     DialogContent,
@@ -30,6 +33,7 @@ type Vertical = {
     headName: string | null;
     headRole: string | null;
     assessmentStatus: string;
+    sessionRunLimit: number;
     _count: { sessions: number };
 };
 
@@ -43,6 +47,22 @@ type ProjectDetail = {
     organization: { id: string; name: string };
     verticals: Vertical[];
     _count: { verticals: number };
+};
+
+type ProjectMember = {
+    id: string;
+    userId: string;
+    role: string;
+    name: string;
+    email: string;
+    platformRole: string;
+};
+
+type AvailableUser = {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
 };
 
 const statusConfig: Record<string, { label: string; color: string; percent: number }> = {
@@ -67,6 +87,8 @@ const defaultVerticals = [
 ];
 
 export default function ProjectPage() {
+    const { data: session } = useSession();
+    const user = session?.user;
     const { projectId } = useParams<{ projectId: string }>();
     const [project, setProject] = useState<ProjectDetail | null>(null);
     const [loading, setLoading] = useState(true);
@@ -75,15 +97,80 @@ export default function ProjectPage() {
     const [addingDefaults, setAddingDefaults] = useState(false);
     const [form, setForm] = useState({ name: "", description: "", headName: "", headRole: "" });
 
+    // Members state
+    const [members, setMembers] = useState<ProjectMember[]>([]);
+    const [availableUsers, setAvailableUsers] = useState<AvailableUser[]>([]);
+    const [membersLoading, setMembersLoading] = useState(false);
+    const [assignUserOpen, setAssignUserOpen] = useState(false);
+    const [assigning, setAssigning] = useState(false);
+    const [selectedUser, setSelectedUser] = useState<string>("");
+    const [assignRole, setAssignRole] = useState<string>("member");
+
     const fetchProject = async () => {
         const res = await fetch(`/api/projects/${projectId}`);
-        if (res.ok) setProject(await res.json());
+        if (res.ok) {
+            const data = await res.json();
+            setProject(data.success ? data.data : data);
+        }
         setLoading(false);
+    };
+
+    const fetchMembers = async () => {
+        setMembersLoading(true);
+        const res = await fetch(`/api/projects/${projectId}/members`);
+        if (res.ok) {
+            const data = await res.json();
+            if (data.success) {
+                setMembers(data.data.members);
+                setAvailableUsers(data.data.availableUsers);
+            }
+        }
+        setMembersLoading(false);
     };
 
     useEffect(() => {
         fetchProject();
+        fetchMembers();
     }, [projectId]);
+
+    const handleAssignMember = async () => {
+        if (!selectedUser) {
+            toast.error("Please select a user");
+            return;
+        }
+        setAssigning(true);
+        const res = await fetch(`/api/projects/${projectId}/members`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: selectedUser, role: assignRole }),
+        });
+
+        if (res.ok) {
+            toast.success("Member assigned successfully");
+            setAssignUserOpen(false);
+            setSelectedUser("");
+            setAssignRole("member");
+            fetchMembers();
+        } else {
+            const data = await res.json();
+            toast.error(data.message || "Failed to assign member");
+        }
+        setAssigning(false);
+    };
+
+    const handleRemoveMember = async (memberId: string) => {
+        if (!confirm("Are you sure you want to remove this member from the project?")) return;
+        const res = await fetch(`/api/projects/${projectId}/members/${memberId}`, {
+            method: "DELETE",
+        });
+        if (res.ok) {
+            toast.success("Member removed");
+            fetchMembers();
+        } else {
+            const data = await res.json();
+            toast.error(data.message || "Failed to remove member");
+        }
+    };
 
     const handleCreate = async () => {
         if (!form.name.trim()) {
@@ -111,6 +198,30 @@ export default function ProjectPage() {
             toast.error("Failed to add vertical");
         }
         setCreating(false);
+    };
+
+    const handleDeleteVertical = async (e: React.MouseEvent, verticalId: string) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (!confirm("Are you sure you want to delete this vertical? This will delete all associated sessions and interview data.")) {
+            return;
+        }
+
+        try {
+            const res = await fetch(`/api/verticals/${verticalId}`, {
+                method: "DELETE",
+            });
+            if (res.ok) {
+                toast.success("Vertical deleted successfully");
+                fetchProject();
+            } else {
+                const data = await res.json();
+                toast.error(data.message || "Failed to delete vertical");
+            }
+        } catch {
+            toast.error("Network error deleting vertical");
+        }
     };
 
     const handleAddDefaults = async () => {
@@ -153,11 +264,7 @@ export default function ProjectPage() {
         <div className="space-y-6">
             {/* Breadcrumb */}
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Link href="/dashboard/orgs" className="hover:text-foreground transition-colors">Organizations</Link>
-                <span>/</span>
-                <Link href={`/dashboard/orgs/${project.organization.id}`} className="hover:text-foreground transition-colors">
-                    {project.organization.name}
-                </Link>
+                <Link href="/dashboard/projects" className="hover:text-foreground transition-colors">Projects</Link>
                 <span>/</span>
                 <span className="text-foreground">{project.name}</span>
             </div>
@@ -173,6 +280,7 @@ export default function ProjectPage() {
             <Tabs defaultValue="verticals" className="space-y-4">
                 <TabsList>
                     <TabsTrigger value="verticals">Org Chart / Verticals</TabsTrigger>
+                    <TabsTrigger value="members">Members</TabsTrigger>
                     <TabsTrigger value="overview">Overview</TabsTrigger>
                     <TabsTrigger value="master-dfd" disabled={
                         !project.verticals.some((v) => v.assessmentStatus === "dfd_generated")
@@ -180,6 +288,105 @@ export default function ProjectPage() {
                         Master DFD
                     </TabsTrigger>
                 </TabsList>
+
+                <TabsContent value="members" className="space-y-4">
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between pb-4 border-b">
+                            <div>
+                                <CardTitle className="text-base">Project Members</CardTitle>
+                                <CardDescription className="text-xs">Manage who has access to this project.</CardDescription>
+                            </div>
+                            <Dialog open={assignUserOpen} onOpenChange={setAssignUserOpen}>
+                                <DialogTrigger asChild>
+                                    <Button size="sm">Assign Member</Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                    <DialogHeader>
+                                        <DialogTitle>Assign Project Member</DialogTitle>
+                                        <DialogDescription>Assign a user from your organization to this project.</DialogDescription>
+                                    </DialogHeader>
+                                    <div className="space-y-4 py-4">
+                                        <div className="space-y-2">
+                                            <Label>User</Label>
+                                            <Select value={selectedUser} onValueChange={setSelectedUser}>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Select a user" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {availableUsers.map(u => (
+                                                        <SelectItem key={u.id} value={u.id}>
+                                                            {u.name} ({u.email})
+                                                        </SelectItem>
+                                                    ))}
+                                                    {availableUsers.length === 0 && (
+                                                        <SelectItem value="none" disabled>No available users</SelectItem>
+                                                    )}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Project Role</Label>
+                                            <Select value={assignRole} onValueChange={setAssignRole}>
+                                                <SelectTrigger>
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="owner">Owner</SelectItem>
+                                                    <SelectItem value="admin">Admin</SelectItem>
+                                                    <SelectItem value="member">Member</SelectItem>
+                                                    <SelectItem value="viewer">Viewer</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    </div>
+                                    <DialogFooter>
+                                        <Button variant="outline" onClick={() => setAssignUserOpen(false)} disabled={assigning}>Cancel</Button>
+                                        <Button onClick={handleAssignMember} disabled={assigning || !selectedUser || selectedUser === "none"}>
+                                            {assigning ? "Assigning..." : "Assign"}
+                                        </Button>
+                                    </DialogFooter>
+                                </DialogContent>
+                            </Dialog>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            {membersLoading ? (
+                                <div className="p-8 text-center text-sm text-muted-foreground">Loading members...</div>
+                            ) : members.length === 0 ? (
+                                <div className="p-8 text-center text-sm text-muted-foreground">No members assigned.</div>
+                            ) : (
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Name</TableHead>
+                                            <TableHead>Role</TableHead>
+                                            <TableHead className="text-right">Action</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {members.map((m) => (
+                                            <TableRow key={m.id}>
+                                                <TableCell>
+                                                    <div className="font-medium text-sm">{m.name}</div>
+                                                    <div className="text-xs text-muted-foreground">{m.email}</div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge variant="secondary" className="capitalize text-xs">
+                                                        {m.role}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <Button variant="ghost" size="sm" className="text-destructive h-8 px-2 hover:bg-destructive/10" onClick={() => handleRemoveMember(m.id)}>
+                                                        Remove
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
 
                 <TabsContent value="overview" className="space-y-4">
                     <div className="grid gap-4 md:grid-cols-3">
@@ -317,6 +524,16 @@ export default function ProjectPage() {
                                                     <CardTitle className="text-base group-hover:text-primary transition-colors">
                                                         {vertical.name}
                                                     </CardTitle>
+                                                    {user?.role === "admin" && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-6 w-6 text-destructive hover:bg-destructive/10 hover:text-destructive z-10"
+                                                            onClick={(e) => handleDeleteVertical(e, vertical.id)}
+                                                        >
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
+                                                        </Button>
+                                                    )}
                                                 </div>
                                                 {vertical.headName && (
                                                     <CardDescription className="text-xs">
@@ -333,15 +550,20 @@ export default function ProjectPage() {
                                                         {status.label}
                                                     </Badge>
                                                     <span className="text-muted-foreground">
-                                                        {vertical._count.sessions} sessions
+                                                        {vertical._count.sessions} / {vertical.sessionRunLimit} sessions
                                                     </span>
                                                 </div>
-                                                {/* Progress bar */}
-                                                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                                                    <div
-                                                        className={`h-full ${status.color} rounded-full transition-all duration-500`}
-                                                        style={{ width: `${status.percent}%` }}
-                                                    />
+                                                {/* Usage Progress bar */}
+                                                <div className="space-y-1">
+                                                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                                                        <div
+                                                            className={`h-full ${vertical._count.sessions >= vertical.sessionRunLimit ? 'bg-destructive' : 'bg-primary'} rounded-full transition-all duration-500`}
+                                                            style={{ width: `${Math.min((vertical._count.sessions / (vertical.sessionRunLimit || 1)) * 100, 100)}%` }}
+                                                        />
+                                                    </div>
+                                                    <div className="flex justify-end pt-1 text-[10px] text-muted-foreground">
+                                                        {Math.max(0, vertical.sessionRunLimit - vertical._count.sessions)} assessments remaining
+                                                    </div>
                                                 </div>
                                             </CardContent>
                                         </Card>

@@ -1,17 +1,21 @@
-import { NextResponse } from "next/server";
 import prisma from "@/lib/db/prisma";
-import { getCurrentUser, unauthorizedResponse } from "@/lib/auth/helpers";
+import { getCurrentUser, requireVerticalOrgAccess } from "@/lib/auth/helpers";
+import { successResponse, unauthorizedResponse, forbiddenResponse, notFoundResponse, serverErrorResponse } from "@/lib/auth/responses";
 
+// GET /api/verticals/[verticalId] — vertical detail (org-scoped)
 export async function GET(
     request: Request,
     { params }: { params: Promise<{ verticalId: string }> }
 ) {
-    const user = await getCurrentUser();
-    if (!user) return unauthorizedResponse();
-
-    const { verticalId } = await params;
-
     try {
+        const user = await getCurrentUser();
+        if (!user) return unauthorizedResponse();
+
+        const { verticalId } = await params;
+
+        // Verify vertical → project → org chain
+        await requireVerticalOrgAccess(user, verticalId);
+
         const vertical = await prisma.vertical.findUnique({
             where: { id: verticalId },
             include: {
@@ -37,15 +41,11 @@ export async function GET(
                         creator: { select: { name: true } },
                     },
                 },
-                dataMatrix: true,
-                _count: { select: { sessions: true, dataMappingRows: true } },
+                _count: { select: { sessions: true } },
             },
         });
 
-        if (!vertical) {
-            console.error(`Vertical not found: ${verticalId}`);
-            return NextResponse.json({ error: "Vertical not found" }, { status: 404 });
-        }
+        if (!vertical) return notFoundResponse("Vertical not found");
 
         // Handle BigInt serialization
         const serializedVertical = JSON.parse(
@@ -54,51 +54,69 @@ export async function GET(
             )
         );
 
-        return NextResponse.json(serializedVertical);
-    } catch (error) {
-        console.error("Error fetching vertical:", error);
-        return NextResponse.json(
-            { error: "Internal server error", details: error instanceof Error ? error.message : "Unknown error" },
-            { status: 500 }
-        );
+        return successResponse(serializedVertical);
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        if (message.includes("different organization")) return forbiddenResponse(message);
+        console.error("[Verticals GET/:id]", error);
+        return serverErrorResponse();
     }
 }
 
+// PUT /api/verticals/[verticalId] — update vertical (org-scoped)
 export async function PUT(
     request: Request,
     { params }: { params: Promise<{ verticalId: string }> }
 ) {
-    const user = await getCurrentUser();
-    if (!user) return unauthorizedResponse();
+    try {
+        const user = await getCurrentUser();
+        if (!user) return unauthorizedResponse();
 
-    const { verticalId } = await params;
-    const body = await request.json();
+        const { verticalId } = await params;
+        await requireVerticalOrgAccess(user, verticalId);
 
-    const vertical = await prisma.vertical.update({
-        where: { id: verticalId },
-        data: {
-            name: body.name,
-            description: body.description,
-            headName: body.headName,
-            headRole: body.headRole,
-            headContact: body.headContact,
-            assessmentStatus: body.assessmentStatus,
-        },
-    });
+        const body = await request.json();
 
-    return NextResponse.json(vertical);
+        const vertical = await prisma.vertical.update({
+            where: { id: verticalId },
+            data: {
+                name: body.name,
+                description: body.description,
+                headName: body.headName,
+                headRole: body.headRole,
+                headContact: body.headContact,
+                assessmentStatus: body.assessmentStatus,
+            },
+        });
+
+        return successResponse(vertical);
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        if (message.includes("different organization")) return forbiddenResponse(message);
+        console.error("[Verticals PUT/:id]", error);
+        return serverErrorResponse();
+    }
 }
 
+// DELETE /api/verticals/[verticalId] — delete vertical (org-scoped)
 export async function DELETE(
     request: Request,
     { params }: { params: Promise<{ verticalId: string }> }
 ) {
-    const user = await getCurrentUser();
-    if (!user) return unauthorizedResponse();
+    try {
+        const user = await getCurrentUser();
+        if (!user) return unauthorizedResponse();
 
-    const { verticalId } = await params;
+        const { verticalId } = await params;
+        await requireVerticalOrgAccess(user, verticalId);
 
-    await prisma.vertical.delete({ where: { id: verticalId } });
+        await prisma.vertical.delete({ where: { id: verticalId } });
 
-    return NextResponse.json({ success: true });
+        return successResponse({ deleted: true, verticalId });
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        if (message.includes("different organization")) return forbiddenResponse(message);
+        console.error("[Verticals DELETE/:id]", error);
+        return serverErrorResponse();
+    }
 }

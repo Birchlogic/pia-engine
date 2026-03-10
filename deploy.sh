@@ -2,7 +2,8 @@
 set -euo pipefail
 
 # ─── Config ───
-AWS="$HOME/.venv/bin/aws"
+export AWS_PROFILE="birchlogic"
+AWS="/usr/local/bin/aws"
 REGION="us-east-1"
 ACCOUNT_ID="506675684271"
 REPO_NAME="pia-engine"

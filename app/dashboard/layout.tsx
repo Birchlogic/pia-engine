@@ -29,23 +29,36 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { ModeToggle } from "@/components/mode-toggle";
 
-const navItems = [
-    {
-        title: "Organizations",
-        href: "/dashboard/orgs",
-        icon: (
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z" />
-                <path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2" />
-                <path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2" />
-                <path d="M10 6h4" />
-                <path d="M10 10h4" />
-                <path d="M10 14h4" />
-                <path d="M10 18h4" />
-            </svg>
-        ),
-    },
-];
+const getNavItems = (role?: string) => {
+    const items = [
+        {
+            title: "Projects",
+            href: "/dashboard/projects",
+            icon: (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                    <path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" />
+                </svg>
+            ),
+        },
+    ];
+
+    if (role === "admin") {
+        items.push({
+            title: "Users",
+            href: "/dashboard/users",
+            icon: (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+            ),
+        });
+    }
+
+    return items;
+};
 
 export default function DashboardLayout({
     children,
@@ -71,7 +84,7 @@ export default function DashboardLayout({
                     <SidebarMenu>
                         <SidebarMenuItem>
                             <SidebarMenuButton size="lg" asChild>
-                                <Link href="/dashboard/orgs">
+                                <Link href="/dashboard/projects">
                                     <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                                         <img src="/logo.jpeg" alt="K&S Logo" className="h-8 w-8 rounded-md object-cover" />
                                     </div>
@@ -89,7 +102,7 @@ export default function DashboardLayout({
                         <SidebarGroupLabel>Navigation</SidebarGroupLabel>
                         <SidebarGroupContent>
                             <SidebarMenu>
-                                {navItems.map((item) => (
+                                {getNavItems(user?.role).map((item) => (
                                     <SidebarMenuItem key={item.href}>
                                         <SidebarMenuButton
                                             asChild

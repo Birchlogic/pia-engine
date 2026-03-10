@@ -1,38 +1,35 @@
-import { NextResponse } from "next/server";
 import prisma from "@/lib/db/prisma";
-import { getCurrentUser, unauthorizedResponse } from "@/lib/auth/helpers";
+import { getCurrentUser } from "@/lib/auth/helpers";
+import { successResponse, errorResponse, unauthorizedResponse, serverErrorResponse } from "@/lib/auth/responses";
 
+// GET /api/orgs — user only sees their own organization
 export async function GET() {
-    const user = await getCurrentUser();
-    if (!user) return unauthorizedResponse();
+    try {
+        const user = await getCurrentUser();
+        if (!user) return unauthorizedResponse();
 
-    const orgs = await prisma.organization.findMany({
-        include: {
-            _count: { select: { projects: true } },
-            creator: { select: { name: true } },
-        },
-        orderBy: { createdAt: "desc" },
-    });
+        if (!user.orgId) {
+            return errorResponse("User is not assigned to any organization", 403);
+        }
 
-    return NextResponse.json(orgs);
+        const org = await prisma.organization.findUnique({
+            where: { id: user.orgId },
+            include: {
+                _count: { select: { projects: true, users: true } },
+                creator: { select: { name: true } },
+            },
+        });
+
+        if (!org) {
+            return errorResponse("Organization not found", 404);
+        }
+
+        // Return as array for backward compatibility with frontend
+        return successResponse([org]);
+    } catch (error) {
+        console.error("[Orgs GET]", error);
+        return serverErrorResponse();
+    }
 }
 
-export async function POST(request: Request) {
-    const user = await getCurrentUser();
-    if (!user) return unauthorizedResponse();
-
-    const body = await request.json();
-
-    const org = await prisma.organization.create({
-        data: {
-            name: body.name,
-            industry: body.industry || null,
-            jurisdiction: body.jurisdiction || null,
-            regulatoryScope: body.regulatoryScope || [],
-            sizeBand: body.sizeBand || null,
-            createdById: user.id,
-        },
-    });
-
-    return NextResponse.json(org, { status: 201 });
-}
+// POST removed — org creation is SuperAdmin-only via /api/super-admin/orgs

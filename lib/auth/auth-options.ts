@@ -24,6 +24,10 @@ export const authOptions: NextAuthOptions = {
                     throw new Error("No user found with this email");
                 }
 
+                if (!user.isActive) {
+                    throw new Error("Account has been deactivated. Contact your administrator.");
+                }
+
                 const isValid = await compare(credentials.password, user.password);
                 if (!isValid) {
                     throw new Error("Invalid password");

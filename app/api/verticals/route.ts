@@ -1,60 +1,85 @@
-import { NextResponse } from "next/server";
 import prisma from "@/lib/db/prisma";
-import { getCurrentUser, unauthorizedResponse } from "@/lib/auth/helpers";
+import { getCurrentUser, requireProjectOrgAccess } from "@/lib/auth/helpers";
+import { successResponse, errorResponse, unauthorizedResponse, forbiddenResponse, serverErrorResponse } from "@/lib/auth/responses";
+import { validateBody, createVerticalSchema } from "@/lib/validations/schemas";
 
+// GET /api/verticals?projectId=xxx — list verticals (org-scoped)
 export async function GET(request: Request) {
-    const user = await getCurrentUser();
-    if (!user) return unauthorizedResponse();
+    try {
+        const user = await getCurrentUser();
+        if (!user) return unauthorizedResponse();
 
-    const { searchParams } = new URL(request.url);
-    const projectId = searchParams.get("projectId");
+        const { searchParams } = new URL(request.url);
+        const projectId = searchParams.get("projectId");
 
-    if (!projectId) {
-        return NextResponse.json({ error: "projectId is required" }, { status: 400 });
+        if (!projectId) {
+            return errorResponse("projectId is required", 400);
+        }
+
+        // Verify project belongs to user's org
+        await requireProjectOrgAccess(user, projectId);
+
+        const verticals = await prisma.vertical.findMany({
+            where: { projectId },
+            include: {
+                _count: { select: { sessions: true } },
+            },
+            orderBy: { sortOrder: "asc" },
+        });
+
+        return successResponse(verticals);
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        if (message.includes("different organization")) return forbiddenResponse(message);
+        if (message.includes("not found")) return errorResponse(message, 404);
+        console.error("[Verticals GET]", error);
+        return serverErrorResponse();
     }
-
-    const verticals = await prisma.vertical.findMany({
-        where: { projectId },
-        include: {
-            _count: { select: { sessions: true } },
-        },
-        orderBy: { sortOrder: "asc" },
-    });
-
-    return NextResponse.json(verticals);
 }
 
+// POST /api/verticals — create vertical (org-scoped)
 export async function POST(request: Request) {
-    const user = await getCurrentUser();
-    if (!user) return unauthorizedResponse();
+    try {
+        const user = await getCurrentUser();
+        if (!user) return unauthorizedResponse();
 
-    const body = await request.json();
+        const body = await request.json();
+        const validation = validateBody(createVerticalSchema, body);
 
-    if (!body.projectId || !body.name) {
-        return NextResponse.json(
-            { error: "projectId and name are required" },
-            { status: 400 }
-        );
+        if ("error" in validation) {
+            return errorResponse(validation.error, 400);
+        }
+
+        const { projectId, name, description, headName, headRole, headContact } = validation.data;
+
+        // Verify project belongs to user's org
+        await requireProjectOrgAccess(user, projectId);
+
+        // Get next sort order
+        const maxSort = await prisma.vertical.aggregate({
+            where: { projectId },
+            _max: { sortOrder: true },
+        });
+
+        const vertical = await prisma.vertical.create({
+            data: {
+                projectId,
+                name,
+                description: description || null,
+                headName: headName || null,
+                headRole: headRole || null,
+                headContact: headContact || null,
+                sortOrder: (maxSort._max.sortOrder ?? -1) + 1,
+                createdById: user.id,
+            },
+        });
+
+        return successResponse(vertical, 201);
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        if (message.includes("different organization")) return forbiddenResponse(message);
+        if (message.includes("not found")) return errorResponse(message, 404);
+        console.error("[Verticals POST]", error);
+        return serverErrorResponse();
     }
-
-    // Get current max sort order
-    const maxSort = await prisma.vertical.aggregate({
-        where: { projectId: body.projectId },
-        _max: { sortOrder: true },
-    });
-
-    const vertical = await prisma.vertical.create({
-        data: {
-            projectId: body.projectId,
-            name: body.name,
-            description: body.description || null,
-            headName: body.headName || null,
-            headRole: body.headRole || null,
-            headContact: body.headContact || null,
-            sortOrder: (maxSort._max.sortOrder ?? -1) + 1,
-            createdById: user.id,
-        },
-    });
-
-    return NextResponse.json(vertical, { status: 201 });
 }
