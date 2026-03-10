@@ -174,3 +174,4 @@ echo "  🌐 Function URL: $FUNC_URL"
 echo "══════════════════════════════════════════"
 echo ""
 echo "⚠️  Update NEXTAUTH_URL in Lambda env vars to: $FUNC_URL"
+
