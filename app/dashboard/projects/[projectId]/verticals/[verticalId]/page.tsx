@@ -135,6 +135,7 @@ type VerticalDetail = {
     };
     sessions: Session[];
     dataMatrix: { id: string } | null;
+    sessionRunLimit: number;
     _count: { sessions: number; dataMappingRows: number };
 };
 
@@ -702,7 +703,8 @@ export default function VerticalWorkspacePage() {
                     <TabsTrigger value="sessions">Sessions ({(vertical.sessions || []).length})</TabsTrigger>
                     <TabsTrigger value="matrix">Data Matrix</TabsTrigger>
 
-                    <TabsTrigger value="dfd">DFD</TabsTrigger>
+                    <TabsTrigger value="dfd">DFD Viewer</TabsTrigger>
+                    <TabsTrigger value="dfd-editor">DFD Editor</TabsTrigger>
 
                 </TabsList>
 
@@ -1791,6 +1793,53 @@ export default function VerticalWorkspacePage() {
                             <p className="text-sm text-slate-500 mt-1 max-w-sm text-center">
                                 A DFD will be automatically generated once the Schema mapping completes.
                             </p>
+                        </Card>
+                    )}
+                </TabsContent>
+
+                {/* ────────────── DFD Editor Tab ────────────── */}
+                <TabsContent value="dfd-editor" className="space-y-4">
+                    {dfdLoading || !knowledgeGraph || !privacyDfd || !renderPlan ? (
+                        <div className="space-y-3">
+                            <Skeleton className="h-64 w-full" />
+                            <p className="text-sm text-muted-foreground text-center">Loading editor data...</p>
+                        </div>
+                    ) : (
+                        <Card className="p-0 overflow-hidden border-none shadow-none bg-transparent">
+                            <EditableDfd
+                                data={{
+                                    knowledgeGraph: knowledgeGraph,
+                                    privacyDfd: privacyDfd,
+                                    renderPlan: renderPlan
+                                }}
+                                onSave={async (updated) => {
+                                    const toastId = toast.loading("Saving DFD changes...");
+                                    try {
+                                        const res = await fetch("/api/dfd/update_session", {
+                                            method: "POST",
+                                            headers: { "Content-Type": "application/json" },
+                                            body: JSON.stringify({
+                                                session_id: verticalId,
+                                                dfd_json: updated.privacyDfd,
+                                                knowledge_graph: updated.knowledgeGraph,
+                                                dfd_plan_json: updated.renderPlan
+                                            }),
+                                        });
+
+                                        if (res.ok) {
+                                            toast.success("DFD updated successfully", { id: toastId });
+                                            // Refresh results to get updated interactive HTML and state from server
+                                            fetchPipelineResults();
+                                        } else {
+                                            const err = await res.json();
+                                            toast.error(err.error || "Failed to update DFD", { id: toastId });
+                                        }
+                                    } catch (e) {
+                                        console.error("Save error:", e);
+                                        toast.error("Error connecting to server", { id: toastId });
+                                    }
+                                }}
+                            />
                         </Card>
                     )}
                 </TabsContent>

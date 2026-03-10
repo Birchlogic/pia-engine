@@ -45,13 +45,21 @@ export async function GET(
         const data = await res.json();
 
         // Overlay any user-defined DFD manual modifications
-        const vertical = await prisma.vertical.findUnique({
+        const vertical = await (prisma.vertical as any).findUnique({
             where: { id: verticalId },
-            select: { dfdOverride: true }
+            select: { id: true, name: true, headName: true, headRole: true, projectId: true, description: true, assessmentStatus: true, createdAt: true, updatedAt: true, createdById: true, headContact: true, sortOrder: true, dfdOverride: true }
         });
 
         if (vertical?.dfdOverride) {
-            data.dfd_json = vertical.dfdOverride;
+            const override = vertical.dfdOverride as any;
+            if (override.dfd_json || override.knowledge_graph || override.dfd_render_plan) {
+                if (override.dfd_json) data.dfd_json = override.dfd_json;
+                if (override.knowledge_graph) data.knowledge_graph = override.knowledge_graph;
+                if (override.dfd_render_plan) data.dfd_render_plan = override.dfd_render_plan;
+            } else {
+                // Fallback for old simple format
+                data.dfd_json = vertical.dfdOverride;
+            }
         }
 
         return NextResponse.json(data, { status: 200 });
@@ -84,9 +92,9 @@ export async function PUT(
         if (!vertical) return NextResponse.json({ error: "Vertical not found" }, { status: 404 });
         if (vertical.project.orgId !== user.orgId) return forbiddenResponse("Access denied");
 
-        const updated = await prisma.vertical.update({
+        const updated = await (prisma.vertical as any).update({
             where: { id: verticalId },
-            data: { dfdOverride: body.dfd_json }
+            data: { dfdOverride: body.dfd_json } as any
         });
 
         return NextResponse.json({ success: true, dfd_json: updated.dfdOverride });
