@@ -26,9 +26,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DfdHtmlRenderer, type DfdData } from "@/components/dfd/DfdHtmlRenderer";
+import EditableDfd, { type DfdInput, type KnowledgeGraph, type PrivacyDfd, type RenderPlan } from "@/components/dfd/EditableDfd";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Activity, ChevronDown, ChevronUp } from "lucide-react";
+import ListBasedDfdEditor from "@/components/dfd/ListBasedDfdEditor";
 
 type SessionFile = {
     id: string;
@@ -191,6 +193,10 @@ export default function VerticalWorkspacePage() {
     const [dfdLoading, setDfdLoading] = useState(true);
     const [dfdJsonString, setDfdJsonString] = useState<string>("");
     const [savingDfd, setSavingDfd] = useState(false);
+    // 3-JSON DFD structures from pipeline
+    const [knowledgeGraph, setKnowledgeGraph] = useState<KnowledgeGraph | null>(null);
+    const [privacyDfd, setPrivacyDfd] = useState<PrivacyDfd | null>(null);
+    const [renderPlan, setRenderPlan] = useState<RenderPlan | null>(null);
     const [jsonEditorOpen, setJsonEditorOpen] = useState(false);
     const [downloadingFiles, setDownloadingFiles] = useState<Set<string>>(new Set());
     const [activeTab, setActiveTab] = useState("sessions");
@@ -261,9 +267,20 @@ export default function VerticalWorkspacePage() {
                 const data = await res.json();
                 // Data mapping rows
                 if (data.data_mapping_rows && Array.isArray(data.data_mapping_rows)) {
-                    setMatrixRows(data.data_mapping_rows.map((row: any, idx: number) => ({
+                    // Filter duplicates based on data category (case insensitive)
+                    const uniqueCategories = new Set<string>();
+                    const uniqueRows: any[] = [];
+                    for (const row of data.data_mapping_rows) {
+                        const categoryLower = (row.data_category || "").toLowerCase().trim();
+                        if (categoryLower && !uniqueCategories.has(categoryLower)) {
+                            uniqueCategories.add(categoryLower);
+                            uniqueRows.push(row);
+                        }
+                    }
+
+                    setMatrixRows(uniqueRows.map((row: any, idx: number) => ({
                         id: row.id || `row-${idx}`,
-                        sNo: row.s_no ?? idx + 1,
+                        sNo: idx + 1,
                         dataCategory: row.data_category || "",
                         description: row.description || "",
                         purpose: row.purpose || "",
@@ -274,12 +291,15 @@ export default function VerticalWorkspacePage() {
                         legalBasis: row.legal_basis || "",
                     })));
                 }
-                // DFD JSON
                 // DFD JSON & HTML
                 if (data.dfd_json) {
                     setDfdData(data.dfd_json);
                     setDfdJsonString(JSON.stringify(data.dfd_json, null, 2));
                 }
+                // 3-JSON DFD structures (knowledge_graph, privacy_dfd, dfd_render_plan)
+                if (data.knowledge_graph) setKnowledgeGraph(data.knowledge_graph);
+                if (data.privacy_dfd) setPrivacyDfd(data.privacy_dfd);
+                if (data.dfd_render_plan) setRenderPlan(data.dfd_render_plan);
                 if (data.interactive_html) {
                     setDfdHtml(data.interactive_html);
                 }
@@ -1260,156 +1280,149 @@ export default function VerticalWorkspacePage() {
                             <Skeleton className="h-10 w-full" />
                             <Skeleton className="h-10 w-full" />
                         </div>
-                    ) : matrixRows.length > 0 ? (
-                        <Collapsible
-                            open={matrixOpen}
-                            onOpenChange={setMatrixOpen}
-                            className="bg-card text-card-foreground shadow-sm rounded-xl border border-border mt-4"
-                        >
-                            <div className="flex flex-col space-y-1.5 p-6 pb-4">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
-                                        <CollapsibleTrigger asChild>
-                                            <Button variant="ghost" size="sm" className="w-9 p-0 hover:bg-muted/50 rounded-md transition-transform duration-200">
-                                                {matrixOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                                                <span className="sr-only">Toggle</span>
-                                            </Button>
-                                        </CollapsibleTrigger>
-                                        <div>
-                                            <h3 className="text-xl font-semibold leading-none tracking-tight">1. Data Mapping & Inventory Rows</h3>
-                                            <p className="text-sm text-muted-foreground mt-1.5">{matrixRows.length} data categories identified</p>
+                    ) : (
+                        <>
+                            {/* ────────────── DFD Relational Editor ────────────── */}
+                            <ListBasedDfdEditor
+                                data={{
+                                    dfd_json: dfdData,
+                                    knowledge_graph: knowledgeGraph,
+                                    privacy_dfd: privacyDfd,
+                                    dfd_render_plan: renderPlan
+                                }}
+                                onSave={async (updated) => {
+                                    setSavingDfd(true);
+                                    try {
+                                        const res = await fetch(`/api/verticals/${verticalId}/pipeline/results`, {
+                                            method: "PUT",
+                                            headers: { "Content-Type": "application/json" },
+                                            body: JSON.stringify({
+                                                dfd_json: updated.knowledgeGraph,
+                                                knowledge_graph: updated.knowledgeGraph,
+                                                privacy_dfd: updated.privacyDfd,
+                                                dfd_render_plan: updated.renderPlan,
+                                            }),
+                                        });
+                                        if (res.ok) {
+                                            toast.success("DFD saved successfully");
+                                            setKnowledgeGraph(updated.knowledgeGraph);
+                                            setPrivacyDfd(updated.privacyDfd);
+                                            setRenderPlan(updated.renderPlan);
+                                            setDfdData(updated.knowledgeGraph);
+                                            setDfdJsonString(JSON.stringify(updated.knowledgeGraph, null, 2));
+                                        } else {
+                                            toast.error("Failed to save DFD");
+                                        }
+                                    } catch {
+                                        toast.error("Error saving DFD");
+                                    } finally {
+                                        setSavingDfd(false);
+                                    }
+                                }}
+                            />
+
+                            {/* ────────────── Data Mapping & Inventory Rows ────────────── */}
+                            {matrixRows.length > 0 ? (
+                                <Collapsible
+                                    open={matrixOpen}
+                                    onOpenChange={setMatrixOpen}
+                                    className="bg-card text-card-foreground shadow-sm rounded-xl border border-border mt-4"
+                                >
+                                    <div className="flex flex-col space-y-1.5 p-6 pb-4">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-3">
+                                                <CollapsibleTrigger asChild>
+                                                    <Button variant="ghost" size="sm" className="w-9 p-0 hover:bg-muted/50 rounded-md transition-transform duration-200">
+                                                        {matrixOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                                        <span className="sr-only">Toggle</span>
+                                                    </Button>
+                                                </CollapsibleTrigger>
+                                                <div>
+                                                    <h3 className="text-xl font-semibold leading-none tracking-tight">1. Data Mapping & Inventory Rows</h3>
+                                                    <p className="text-sm text-muted-foreground mt-1.5">{matrixRows.length} data categories identified</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Button
+                                                    onClick={handleGenerateMatrix}
+                                                    disabled={generatingPipeline}
+                                                    size="sm"
+                                                >
+                                                    {generatingPipeline ? "Generating..." : "Generate Matrix & Schema"}
+                                                </Button>
+                                            </div>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        <Button
-                                            onClick={handleGenerateMatrix}
-                                            disabled={generatingPipeline}
-                                            size="sm"
-                                        >
-                                            {generatingPipeline ? "Generating..." : "Generate Matrix & Schema"}
-                                        </Button>
-                                    </div>
-                                </div>
-                            </div>
-                            <CollapsibleContent>
-                                <div className="p-6 pt-0">
-                                    <div className="overflow-x-auto rounded-lg border max-w-full">
-                                        <table className="w-full min-w-max text-sm">
-                                            <thead>
-                                                <tr className="bg-muted/50">
-                                                    <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">S.No</th>
-                                                    <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Data Category</th>
-                                                    <th className="px-4 py-3 text-left font-semibold">Description</th>
-                                                    <th className="px-4 py-3 text-left font-semibold">Purpose</th>
-                                                    <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Data Owner</th>
-                                                    <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Storage Location</th>
-                                                    <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Data Classification</th>
-                                                    <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Retention Period</th>
-                                                    <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Legal Basis</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {matrixRows.map((row, idx) => (
-                                                    <tr key={row.id} className={idx % 2 === 0 ? "bg-background" : "bg-muted/20"}>
-                                                        <td className="px-4 py-3 font-medium">{row.sNo}</td>
-                                                        <td className="px-4 py-3 font-medium">{row.dataCategory}</td>
-                                                        <td className="px-4 py-3 break-words">{row.description}</td>
-                                                        <td className="px-4 py-3 break-words">{row.purpose}</td>
-                                                        <td className="px-4 py-3">{row.dataOwner}</td>
-                                                        <td className="px-4 py-3">{row.storageLocation}</td>
-                                                        <td className="px-4 py-3">
-                                                            <Badge variant={
-                                                                row.dataClassification.toLowerCase().includes("pii") || row.dataClassification.toLowerCase().includes("sensitive")
-                                                                    ? "destructive"
-                                                                    : row.dataClassification.toLowerCase().includes("confidential")
-                                                                        ? "default"
-                                                                        : "secondary"
-                                                            }>
-                                                                {row.dataClassification}
-                                                            </Badge>
-                                                        </td>
-                                                        <td className="px-4 py-3">{row.retentionPeriod}</td>
-                                                        <td className="px-4 py-3">{row.legalBasis}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            </CollapsibleContent>
-                        </Collapsible>
-                    ) : (
-                        <Card className="border-dashed">
-                            <CardContent className="flex flex-col items-center justify-center py-12">
-                                <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-8 h-8 text-muted-foreground">
-                                        <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
-                                        <line x1="3" x2="21" y1="9" y2="9" />
-                                        <line x1="3" x2="21" y1="15" y2="15" />
-                                        <line x1="9" x2="9" y1="3" y2="21" />
-                                        <line x1="15" x2="15" y1="3" y2="21" />
-                                    </svg>
-                                </div>
-                                <h3 className="text-lg font-semibold mb-1">No Data Matrix Yet</h3>
-                                <p className="text-muted-foreground text-sm mb-4 text-center max-w-sm">
-                                    {hasFinalizedSessions
-                                        ? "Click \"Generate Data Matrix\" in the Sessions tab to create the data mapping."
-                                        : "Finalize at least one session, then generate the Data Matrix from the Sessions tab."}
-                                </p>
-                            </CardContent>
-                        </Card>
-                    )}
-
-                    {/* ────────────── DFD JSON Editor ────────────── */}
-                    <Collapsible
-                        open={jsonEditorOpen}
-                        onOpenChange={setJsonEditorOpen}
-                        className="bg-card text-card-foreground shadow-sm rounded-xl border border-border mt-8"
-                    >
-                        <div className="flex flex-col space-y-1.5 p-6 pb-4 border-b">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <CollapsibleTrigger asChild>
-                                        <Button variant="ghost" size="sm" className="w-9 p-0 hover:bg-muted/50 rounded-md transition-transform duration-200">
-                                            {jsonEditorOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                                            <span className="sr-only">Toggle JSON Editor</span>
-                                        </Button>
-                                    </CollapsibleTrigger>
-                                    <div>
-                                        <h2 className="text-xl font-bold">2. Editable DFD JSON</h2>
-                                        <p className="text-sm text-muted-foreground mt-1">Modify the underlying nodes safely.</p>
-                                    </div>
-                                </div>
-                                <Button
-                                    onClick={handleSaveDfd}
-                                    disabled={savingDfd || !dfdData}
-                                    size="sm"
-                                >
-                                    {savingDfd ? "Saving..." : "Save Modifications"}
-                                </Button>
-                            </div>
-                        </div>
-                        <CollapsibleContent>
-                            <div className="p-6">
-                                {dfdData ? (
-                                    <Textarea
-                                        value={dfdJsonString}
-                                        onChange={(e) => setDfdJsonString(e.target.value)}
-                                        className="font-mono text-sm min-h-[400px]"
-                                        placeholder="{}"
-                                    />
-                                ) : (
-                                    <div className="flex flex-col items-center justify-center py-12 border-dashed border-2 rounded-lg bg-slate-50">
-                                        <Activity className="w-12 h-12 text-slate-300 mb-4" />
-                                        <h3 className="text-lg font-medium text-slate-600">No DFD JSON Available</h3>
-                                        <p className="text-sm text-slate-500 mt-1 max-w-sm text-center">
-                                            Generate the Data Matrix to create the underlying DFD JSON structure first.
+                                    <CollapsibleContent>
+                                        <div className="p-6 pt-0 w-full overflow-hidden">
+                                            <div className="overflow-x-auto rounded-lg border w-full">
+                                                <table className="w-full min-w-max text-sm">
+                                                    <thead>
+                                                        <tr className="bg-muted/50">
+                                                            <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">S.No</th>
+                                                            <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Data Category</th>
+                                                            <th className="px-4 py-3 text-left font-semibold">Description</th>
+                                                            <th className="px-4 py-3 text-left font-semibold">Purpose</th>
+                                                            <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Data Owner</th>
+                                                            <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Storage Location</th>
+                                                            <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Data Classification</th>
+                                                            <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Retention Period</th>
+                                                            <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Legal Basis</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {matrixRows.map((row, idx) => (
+                                                            <tr key={row.id} className={idx % 2 === 0 ? "bg-background" : "bg-muted/20"}>
+                                                                <td className="px-4 py-3 font-medium">{row.sNo}</td>
+                                                                <td className="px-4 py-3 font-medium">{row.dataCategory}</td>
+                                                                <td className="px-4 py-3 break-words">{row.description}</td>
+                                                                <td className="px-4 py-3 break-words">{row.purpose}</td>
+                                                                <td className="px-4 py-3">{row.dataOwner}</td>
+                                                                <td className="px-4 py-3">{row.storageLocation}</td>
+                                                                <td className="px-4 py-3">
+                                                                    <Badge variant={
+                                                                        row.dataClassification.toLowerCase().includes("pii") || row.dataClassification.toLowerCase().includes("sensitive")
+                                                                            ? "destructive"
+                                                                            : row.dataClassification.toLowerCase().includes("confidential")
+                                                                                ? "default"
+                                                                                : "secondary"
+                                                                    }>
+                                                                        {row.dataClassification}
+                                                                    </Badge>
+                                                                </td>
+                                                                <td className="px-4 py-3">{row.retentionPeriod}</td>
+                                                                <td className="px-4 py-3">{row.legalBasis}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </CollapsibleContent>
+                                </Collapsible>
+                            ) : (
+                                <Card className="border-dashed">
+                                    <CardContent className="flex flex-col items-center justify-center py-12">
+                                        <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-8 h-8 text-muted-foreground">
+                                                <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+                                                <line x1="3" x2="21" y1="9" y2="9" />
+                                                <line x1="3" x2="21" y1="15" y2="15" />
+                                                <line x1="9" x2="9" y1="3" y2="21" />
+                                                <line x1="15" x2="15" y1="3" y2="21" />
+                                            </svg>
+                                        </div>
+                                        <h3 className="text-lg font-semibold mb-1">No Data Matrix Yet</h3>
+                                        <p className="text-muted-foreground text-sm mb-4 text-center max-w-sm">
+                                            {hasFinalizedSessions
+                                                ? "Click \"Generate Data Matrix\" in the Sessions tab to create the data mapping."
+                                                : "Finalize at least one session, then generate the Data Matrix from the Sessions tab."}
                                         </p>
-                                    </div>
-                                )}
-                            </div>
-                        </CollapsibleContent>
-                    </Collapsible>
+                                    </CardContent>
+                                </Card>
+                            )}
+                        </>
+                    )}
 
                     {/* ────────────── Schema Content ────────────── */}
                     <Collapsible

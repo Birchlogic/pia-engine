@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser, unauthorizedResponse } from "@/lib/auth/helpers";
 
-const PIPELINE_API = process.env.DFD_API_BASE_URL || "http://44.204.117.243:8000";
+const PIPELINE_API = process.env.DFD_API_BASE_URL || "http://54.236.241.162:8000";
 
 export async function DELETE(
     request: Request,
