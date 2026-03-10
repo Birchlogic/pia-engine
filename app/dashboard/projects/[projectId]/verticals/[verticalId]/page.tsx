@@ -1875,8 +1875,8 @@ export default function VerticalWorkspacePage() {
                                 className="mt-1"
                             />
                             <div>
-                                <p className="font-medium text-sm">DeepSeek RLM Mode</p>
-                                <p className="text-xs text-muted-foreground">Deep reasoning model optimized for high accuracy extraction.</p>
+                                <p className="font-medium text-sm">RLM Ingestion <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300">Medium Accuracy</span></p>
+                                <p className="text-xs text-muted-foreground">Reasoning language model based extraction and ingestion.</p>
                             </div>
                         </label>
                         <label className="flex items-start space-x-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 border-slate-200 dark:border-slate-800">
@@ -1889,8 +1889,8 @@ export default function VerticalWorkspacePage() {
                                 className="mt-1"
                             />
                             <div>
-                                <p className="font-medium text-sm">Aggressive Engine Mode</p>
-                                <p className="text-xs text-muted-foreground">Standard fast processing optimized for extensive text extraction.</p>
+                                <p className="font-medium text-sm">Deterministic, NLP and AI <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">High Accuracy</span></p>
+                                <p className="text-xs text-muted-foreground">Advanced multi-layer processing combining deterministic rules, NLP, and AI extraction.</p>
                             </div>
                         </label>
                         <label className="flex items-start space-x-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 border-slate-200 dark:border-slate-800">
@@ -1903,8 +1903,8 @@ export default function VerticalWorkspacePage() {
                                 className="mt-1"
                             />
                             <div>
-                                <p className="font-medium text-sm">Normal Mode</p>
-                                <p className="text-xs text-muted-foreground">Balanced processing and extraction.</p>
+                                <p className="font-medium text-sm">Normal <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300">Low Accuracy</span></p>
+                                <p className="text-xs text-muted-foreground">Basic processing and extraction.</p>
                             </div>
                         </label>
                     </div>
