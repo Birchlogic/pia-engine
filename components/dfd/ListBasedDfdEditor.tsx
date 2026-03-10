@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog";
 import { Trash2, Plus, Link as LinkIcon, Unlink, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
 
@@ -67,14 +68,27 @@ export default function ListBasedDfdEditor({ data, onSave }: ListBasedDfdEditorP
 
     // --- Actions ---
 
-    const deleteNode = (nodeId: string) => {
-        if (!confirm("Are you sure you want to delete this node and all its connections?")) return;
+    const [nodeToDelete, setNodeToDelete] = useState<any | null>(null);
 
+    const deleteNode = (nodeId: string) => {
+        const node = kgNodes.find(n => n.id === nodeId);
+        if (node) {
+            setNodeToDelete(node);
+        }
+    };
+
+    const confirmDeleteNode = () => {
+        if (!nodeToDelete) return;
+
+        const nodeId = nodeToDelete.id;
         setKgNodes(prev => prev.filter(n => n.id !== nodeId));
         setKgEdges(prev => prev.filter(e => e.source !== nodeId && e.target !== nodeId));
 
         setDfdNodes(prev => prev.filter(n => n.id !== nodeId));
         setDfdFlows(prev => prev.filter(f => f.from !== nodeId && f.to !== nodeId));
+
+        toast.success(`Deleted node: ${nodeToDelete.name}`);
+        setNodeToDelete(null);
     };
 
     const deleteEdge = (source: string, target: string) => {
@@ -314,6 +328,47 @@ export default function ListBasedDfdEditor({ data, onSave }: ListBasedDfdEditorP
                     </div>
                 </div>
             </CollapsibleContent>
+
+            {/* Delete Node Modal */}
+            <Dialog open={!!nodeToDelete} onOpenChange={(open) => !open && setNodeToDelete(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Delete Node</DialogTitle>
+                        <DialogDescription>
+                            Are you sure you want to delete this node? This action will also remove all its incoming and outgoing connections.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {nodeToDelete && (
+                        <div className="py-4 space-y-3 px-1 rounded-md bg-muted/30 border border-border">
+                            <div className="grid grid-cols-[100px_1fr] items-baseline gap-2 text-sm px-3">
+                                <span className="text-muted-foreground font-medium">Node Name:</span>
+                                <span className="font-semibold text-foreground">{nodeToDelete.name}</span>
+                            </div>
+                            <div className="grid grid-cols-[100px_1fr] items-baseline gap-2 text-sm px-3">
+                                <span className="text-muted-foreground font-medium">Node Type:</span>
+                                <Badge variant="outline" className="w-fit capitalize">{nodeToDelete.type?.replace("_", " ") || "Unknown"}</Badge>
+                            </div>
+                            <div className="grid grid-cols-[100px_1fr] items-baseline gap-2 text-sm px-3">
+                                <span className="text-muted-foreground font-medium">Connections:</span>
+                                <span>
+                                    <span className="text-green-600 dark:text-green-400 font-medium">In: {kgEdges.filter(e => e.target === nodeToDelete.id).length}</span>
+                                    <span className="pointer-events-none mx-2 text-muted-foreground">|</span>
+                                    <span className="text-blue-600 dark:text-blue-400 font-medium">Out: {kgEdges.filter(e => e.source === nodeToDelete.id).length}</span>
+                                </span>
+                            </div>
+                        </div>
+                    )}
+                    <DialogFooter className="mt-4">
+                        <DialogClose asChild>
+                            <Button variant="outline" onClick={() => setNodeToDelete(null)}>Cancel</Button>
+                        </DialogClose>
+                        <Button variant="destructive" onClick={confirmDeleteNode}>
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Delete Node
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             <style jsx global>{`
                 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
