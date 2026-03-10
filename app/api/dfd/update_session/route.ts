@@ -3,6 +3,8 @@ import prisma from "@/lib/db/prisma";
 import { getCurrentUser } from "@/lib/auth/helpers";
 import { unauthorizedResponse, forbiddenResponse, serverErrorResponse } from "@/lib/auth/responses";
 
+const PIPELINE_API = process.env.DFD_API_BASE_URL || "http://3.228.3.140:8000";
+
 export async function POST(request: Request) {
     try {
         const user = await getCurrentUser();
@@ -58,6 +60,24 @@ export async function POST(request: Request) {
                 }
             } as any
         });
+
+        // Forward to Python backend for engine-side sync
+        try {
+            await fetch(`${PIPELINE_API}/api/dfd/update_session`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    session_id,
+                    dfd_json,
+                    knowledge_graph,
+                    dfd_plan_json
+                }),
+            });
+        } catch (error) {
+            console.error("Failed to forward DFD update to backend engine:", error);
+            // We don't fail the request if the backend sync fails, 
+            // as we have the data in Prisma.
+        }
 
         return NextResponse.json({
             success: true,
