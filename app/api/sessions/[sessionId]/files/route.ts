@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/db/prisma";
 import { getCurrentUser, unauthorizedResponse } from "@/lib/auth/helpers";
-import { uploadFile, ensureBucket } from "@/lib/storage/s3-client";
+import { uploadToSupabase } from "@/lib/supabase/client";
 
 async function extractTextFromPdf(buffer: Buffer): Promise<string> {
     // pdf-parse doesn't have type declarations, use require
@@ -28,10 +28,10 @@ export async function POST(
         return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
-    // Early check for S3 configuration
-    if (!process.env.S3_ENDPOINT || !process.env.S3_ACCESS_KEY) {
+    // Early check for Supabase configuration
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
         return NextResponse.json(
-            { error: "File upload is not configured. Please set S3_ENDPOINT and S3_ACCESS_KEY in your environment." },
+            { error: "File upload is not configured. Please set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in your environment." },
             { status: 500 }
         );
     }
@@ -54,16 +54,14 @@ export async function POST(
         const buffer = Buffer.from(await file.arrayBuffer());
         const mimeType = ext === "pdf" ? "application/pdf" : "text/plain";
 
-        // Upload to S3 Storage
+        // Upload to Supabase Storage
         let storagePath: string;
         try {
-            await ensureBucket();
-            const result = await uploadFile(buffer, file.name, mimeType, `sessions/${sessionId}`);
-            storagePath = result.storagePath;
+            storagePath = await uploadToSupabase(buffer, file.name, mimeType);
         } catch (err) {
-            console.error(`Failed to upload ${file.name} to S3:`, err);
+            console.error(`Failed to upload ${file.name} to Supabase:`, err);
             return NextResponse.json(
-                { error: `Failed to upload ${file.name}. Check local S3 configuration.` },
+                { error: `Failed to upload ${file.name}. Check Supabase configuration.` },
                 { status: 500 }
             );
         }
