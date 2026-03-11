@@ -8,6 +8,16 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+    AlertDialog,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogCancel,
+    AlertDialogAction,
+} from "@/components/ui/alert-dialog";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -96,6 +106,9 @@ export default function ProjectPage() {
     const [creating, setCreating] = useState(false);
     const [addingDefaults, setAddingDefaults] = useState(false);
     const [form, setForm] = useState({ name: "", description: "", headName: "", headRole: "" });
+    const [deleteVerticalId, setDeleteVerticalId] = useState<string | null>(null);
+    const [deletingVertical, setDeletingVertical] = useState(false);
+    const verticalToDelete = project?.verticals.find((v) => v.id === deleteVerticalId);
 
     // Members state
     const [members, setMembers] = useState<ProjectMember[]>([]);
@@ -200,27 +213,33 @@ export default function ProjectPage() {
         setCreating(false);
     };
 
-    const handleDeleteVertical = async (e: React.MouseEvent, verticalId: string) => {
+    const handleDeleteVertical = (e: React.MouseEvent, verticalId: string) => {
         e.preventDefault();
         e.stopPropagation();
+        setDeleteVerticalId(verticalId);
+    };
 
-        if (!confirm("Are you sure you want to delete this vertical? This will delete all associated sessions and interview data.")) {
-            return;
-        }
-
+    const confirmDeleteVertical = async () => {
+        if (!deleteVerticalId) return;
+        const name = verticalToDelete?.name || "vertical";
+        setDeletingVertical(true);
+        const toastId = toast.loading(`Deleting ${name}...`);
         try {
-            const res = await fetch(`/api/verticals/${verticalId}`, {
+            const res = await fetch(`/api/verticals/${deleteVerticalId}`, {
                 method: "DELETE",
             });
             if (res.ok) {
-                toast.success("Vertical deleted successfully");
+                toast.success(`${name} deleted successfully`, { id: toastId });
+                setDeleteVerticalId(null);
                 fetchProject();
             } else {
                 const data = await res.json();
-                toast.error(data.message || "Failed to delete vertical");
+                toast.error(data.message || "Failed to delete vertical", { id: toastId });
             }
         } catch {
-            toast.error("Network error deleting vertical");
+            toast.error("Network error deleting vertical", { id: toastId });
+        } finally {
+            setDeletingVertical(false);
         }
     };
 
@@ -280,11 +299,9 @@ export default function ProjectPage() {
             <Tabs defaultValue="verticals" className="space-y-4">
                 <TabsList>
                     <TabsTrigger value="verticals">Org Chart / Verticals</TabsTrigger>
-                    <TabsTrigger value="members">Members</TabsTrigger>
-                    <TabsTrigger value="overview">Overview</TabsTrigger>
-                    <TabsTrigger value="master-dfd" disabled={
-                        !project.verticals.some((v) => v.assessmentStatus === "dfd_generated")
-                    }>
+                    <TabsTrigger value="members" disabled>Members</TabsTrigger>
+                    <TabsTrigger value="overview" disabled>Overview</TabsTrigger>
+                    <TabsTrigger value="master-dfd" disabled>
                         Master DFD
                     </TabsTrigger>
                 </TabsList>
@@ -530,8 +547,13 @@ export default function ProjectPage() {
                                                             size="icon"
                                                             className="h-6 w-6 text-destructive hover:bg-destructive/10 hover:text-destructive z-10"
                                                             onClick={(e) => handleDeleteVertical(e, vertical.id)}
+                                                            disabled={deletingVertical && deleteVerticalId === vertical.id}
                                                         >
-                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
+                                                            {deletingVertical && deleteVerticalId === vertical.id ? (
+                                                                <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" opacity=".25" /><path d="M21 12a9 9 0 00-9-9" /></svg>
+                                                            ) : (
+                                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
+                                                            )}
                                                         </Button>
                                                     )}
                                                 </div>
@@ -584,6 +606,28 @@ export default function ProjectPage() {
                     </Card>
                 </TabsContent>
             </Tabs>
+
+            {/* Delete Vertical Confirmation Dialog */}
+            <AlertDialog open={!!deleteVerticalId} onOpenChange={(open) => !open && setDeleteVerticalId(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Vertical</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Are you sure you want to delete <strong>{verticalToDelete?.name}</strong>? This will permanently delete all associated sessions and interview data. This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={deletingVertical}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={confirmDeleteVertical}
+                            disabled={deletingVertical}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            {deletingVertical ? "Deleting..." : "Delete Vertical"}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

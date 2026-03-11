@@ -26,11 +26,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DfdHtmlRenderer, type DfdData } from "@/components/dfd/DfdHtmlRenderer";
-import EditableDfd, { type DfdInput, type KnowledgeGraph, type PrivacyDfd, type RenderPlan } from "@/components/dfd/EditableDfd";
+import { type KnowledgeGraph, type PrivacyDfd, type RenderPlan } from "@/components/dfd/EditableDfd";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Activity, ChevronDown, ChevronUp } from "lucide-react";
 import ListBasedDfdEditor from "@/components/dfd/ListBasedDfdEditor";
+
 
 type SessionFile = {
     id: string;
@@ -194,6 +195,15 @@ export default function VerticalWorkspacePage() {
     const [dfdLoading, setDfdLoading] = useState(true);
     const [dfdJsonString, setDfdJsonString] = useState<string>("");
     const [savingDfd, setSavingDfd] = useState(false);
+    const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+    const [previewing, setPreviewing] = useState(false);
+    const [previewFullscreen, setPreviewFullscreen] = useState(false);
+    const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [editorSubTab, setEditorSubTab] = useState<string>("editor");
+    const [editedNodes, setEditedNodes] = useState<any[]>([]);
+    const [editedEdges, setEditedEdges] = useState<any[]>([]);
+    const [editedLevels, setEditedLevels] = useState<string[][]>([]);
+
     // 3-JSON DFD structures from pipeline
     const [knowledgeGraph, setKnowledgeGraph] = useState<KnowledgeGraph | null>(null);
     const [privacyDfd, setPrivacyDfd] = useState<PrivacyDfd | null>(null);
@@ -590,7 +600,7 @@ export default function VerticalWorkspacePage() {
             });
             const data = await res.json();
             if (res.ok) {
-                toast.success(data.message || "Pipeline started!", { id: toastId });
+                toast.success("Processing started! We're continuously monitoring the status and will update you automatically.", { id: toastId, duration: 5000 });
                 startCooldown();
             } else {
                 toast.error(data.error || "Failed to start pipeline", { id: toastId });
@@ -1284,44 +1294,7 @@ export default function VerticalWorkspacePage() {
                         </div>
                     ) : (
                         <>
-                            {/* ────────────── DFD Relational Editor ────────────── */}
-                            <ListBasedDfdEditor
-                                data={{
-                                    dfd_json: dfdData,
-                                    knowledge_graph: knowledgeGraph,
-                                    privacy_dfd: privacyDfd,
-                                    dfd_render_plan: renderPlan
-                                }}
-                                onSave={async (updated) => {
-                                    setSavingDfd(true);
-                                    try {
-                                        const res = await fetch(`/api/verticals/${verticalId}/pipeline/results`, {
-                                            method: "PUT",
-                                            headers: { "Content-Type": "application/json" },
-                                            body: JSON.stringify({
-                                                dfd_json: updated.knowledgeGraph,
-                                                knowledge_graph: updated.knowledgeGraph,
-                                                privacy_dfd: updated.privacyDfd,
-                                                dfd_render_plan: updated.renderPlan,
-                                            }),
-                                        });
-                                        if (res.ok) {
-                                            toast.success("DFD saved successfully");
-                                            setKnowledgeGraph(updated.knowledgeGraph);
-                                            setPrivacyDfd(updated.privacyDfd);
-                                            setRenderPlan(updated.renderPlan);
-                                            setDfdData(updated.knowledgeGraph);
-                                            setDfdJsonString(JSON.stringify(updated.knowledgeGraph, null, 2));
-                                        } else {
-                                            toast.error("Failed to save DFD");
-                                        }
-                                    } catch {
-                                        toast.error("Error saving DFD");
-                                    } finally {
-                                        setSavingDfd(false);
-                                    }
-                                }}
-                            />
+
 
                             {/* ────────────── Data Mapping & Inventory Rows ────────────── */}
                             {matrixRows.length > 0 ? (
@@ -1440,7 +1413,7 @@ export default function VerticalWorkspacePage() {
                                         <span className="sr-only">Toggle schema</span>
                                     </Button>
                                 </CollapsibleTrigger>
-                                <h2 className="text-xl font-bold">3. Schema-1 Data Model Graph</h2>
+                                <h2 className="text-xl font-bold">2. Schema-1 Data Model Graph</h2>
                             </div>
                         </div>
                         <CollapsibleContent>
@@ -1774,7 +1747,7 @@ export default function VerticalWorkspacePage() {
                             )}
                         </div>
                     ) : dfdHtml ? (
-                        <div className="w-full relative min-h-[800px] h-[90vh] min-w-0 bg-white rounded-lg border overflow-hidden">
+                        <div className="w-full relative min-h-[800px] h-[90vh] min-w-0 rounded-lg border overflow-hidden">
                             <iframe
                                 srcDoc={dfdHtml}
                                 className="w-full h-full border-none"
@@ -1798,49 +1771,188 @@ export default function VerticalWorkspacePage() {
                 </TabsContent>
 
                 {/* ────────────── DFD Editor Tab ────────────── */}
-                <TabsContent value="dfd-editor" className="space-y-4">
-                    {dfdLoading || !knowledgeGraph || !privacyDfd || !renderPlan ? (
+                <TabsContent value="dfd-editor" className="space-y-0">
+                    {dfdLoading || !dfdData ? (
                         <div className="space-y-3">
                             <Skeleton className="h-64 w-full" />
                             <p className="text-sm text-muted-foreground text-center">Loading editor data...</p>
                         </div>
                     ) : (
-                        <Card className="p-0 overflow-hidden border-none shadow-none bg-transparent">
-                            <EditableDfd
-                                data={{
-                                    knowledgeGraph: knowledgeGraph,
-                                    privacyDfd: privacyDfd,
-                                    renderPlan: renderPlan
-                                }}
-                                onSave={async (updated) => {
-                                    const toastId = toast.loading("Saving DFD changes...");
-                                    try {
-                                        const res = await fetch("/api/dfd/update_session", {
-                                            method: "POST",
-                                            headers: { "Content-Type": "application/json" },
-                                            body: JSON.stringify({
-                                                session_id: verticalId,
-                                                dfd_json: updated.privacyDfd,
-                                                knowledge_graph: updated.knowledgeGraph,
-                                                dfd_plan_json: updated.renderPlan
-                                            }),
-                                        });
+                        <div className="bg-card text-card-foreground rounded-lg border border-border shadow-sm overflow-hidden">
+                            {/* Sub-tab header */}
+                            <div className="flex items-center justify-between border-b border-border px-4 py-2 bg-muted/30">
+                                <div className="flex items-center gap-1">
+                                    <button
+                                        onClick={() => setEditorSubTab("editor")}
+                                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${editorSubTab === "editor"
+                                            ? "bg-primary text-primary-foreground"
+                                            : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                                            }`}
+                                    >
+                                        Editor
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setEditorSubTab("preview");
+                                            // Auto-trigger preview when switching to preview tab
+                                            const nodes = editedNodes.length > 0 ? editedNodes : (dfdData?.nodes || []).map((n: any) => ({
+                                                id: n.id || n.node_id || "", name: n.name || "", type: n.type || "unknown",
+                                                aliases: n.aliases || [], data_elements: n.data_elements || [],
+                                                risks: n.risks || [], sources: n.sources || [],
+                                            }));
+                                            const edges = editedEdges.length > 0 ? editedEdges : (dfdData?.edges || []).map((e: any) => ({
+                                                source: e.source || e.source_node || "", target: e.target || e.target_node || "",
+                                                data_elements: e.data_elements || [], flow_type: e.flow_type || "",
+                                                channel: e.channel || "", inferred: e.inferred ?? false, sources: e.sources || [],
+                                            }));
+                                            const levels = editedLevels.length > 0 ? editedLevels : (renderPlan?.levels || dfdData?.dfd_render_plan?.levels || []);
+                                            setPreviewing(true);
+                                            fetch("/api/dfd/preview", {
+                                                method: "POST",
+                                                headers: { "Content-Type": "application/json" },
+                                                body: JSON.stringify({ nodes, edges, levels, pipeline_docs: {} }),
+                                            }).then(res => res.ok ? res.json() : null)
+                                                .then(data => { if (data?.html) setPreviewHtml(data.html); })
+                                                .catch(err => console.error("Preview error:", err))
+                                                .finally(() => setPreviewing(false));
+                                        }}
+                                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-1.5 ${editorSubTab === "preview"
+                                            ? "bg-primary text-primary-foreground"
+                                            : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                                            }`}
+                                    >
+                                        Preview
+                                        {previewing && (
+                                            <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        )}
+                                    </button>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    {editorSubTab === "preview" && (
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7"
+                                            onClick={() => setPreviewFullscreen(!previewFullscreen)}
+                                            title={previewFullscreen ? "Exit fullscreen" : "Expand preview"}
+                                        >
+                                            {previewFullscreen ? (
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3" /><path d="M21 8h-3a2 2 0 0 1-2-2V3" /><path d="M3 16h3a2 2 0 0 1 2 2v3" /><path d="M16 21v-3a2 2 0 0 1 2-2h3" /></svg>
+                                            ) : (
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2" /><path d="M17 3h2a2 2 0 0 1 2 2v2" /><path d="M21 17v2a2 2 0 0 1-2 2h-2" /><path d="M7 21H5a2 2 0 0 1-2-2v-2" /></svg>
+                                            )}
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
 
-                                        if (res.ok) {
-                                            toast.success("DFD updated successfully", { id: toastId });
-                                            // Refresh results to get updated interactive HTML and state from server
-                                            fetchPipelineResults();
-                                        } else {
-                                            const err = await res.json();
-                                            toast.error(err.error || "Failed to update DFD", { id: toastId });
+                            {/* Editor sub-tab content — always mounted, hidden when preview is active */}
+                            <div className={`p-4 ${editorSubTab !== "editor" ? "hidden" : ""}`}>
+                                <ListBasedDfdEditor
+                                    initialNodes={(dfdData?.nodes || []).map((n: any) => ({
+                                        id: n.id || n.node_id || "",
+                                        name: n.name || "",
+                                        type: n.type || "unknown",
+                                        aliases: n.aliases || [],
+                                        data_elements: n.data_elements || [],
+                                        risks: n.risks || [],
+                                        sources: n.sources || [],
+                                    }))}
+                                    initialEdges={(dfdData?.edges || []).map((e: any) => ({
+                                        source: e.source || e.source_node || "",
+                                        target: e.target || e.target_node || "",
+                                        data_elements: e.data_elements || [],
+                                        flow_type: e.flow_type || "",
+                                        channel: e.channel || "",
+                                        inferred: e.inferred ?? false,
+                                        sources: e.sources || [],
+                                    }))}
+                                    initialLevels={renderPlan?.levels || dfdData?.dfd_render_plan?.levels || []}
+                                    previewing={previewing}
+                                    saving={savingDfd}
+                                    onChanged={(nodes, edges, levels) => {
+                                        setEditedNodes(nodes);
+                                        setEditedEdges(edges);
+                                        setEditedLevels(levels);
+                                    }}
+                                    onSave={async (nodes, edges, levels) => {
+                                        setSavingDfd(true);
+                                        const toastId = toast.loading("Saving DFD & regenerating...");
+                                        try {
+                                            const res = await fetch("/api/dfd/update_session", {
+                                                method: "POST",
+                                                headers: { "Content-Type": "application/json" },
+                                                body: JSON.stringify({
+                                                    session_id: verticalId,
+                                                    nodes,
+                                                    edges,
+                                                    levels,
+                                                    pipeline_docs: {},
+                                                }),
+                                            });
+                                            if (res.ok) {
+                                                toast.success("DFD saved & regenerated!", { id: toastId });
+                                                fetchPipelineResults();
+                                            } else {
+                                                const err = await res.json();
+                                                toast.error(err.error || "Failed to save DFD", { id: toastId });
+                                            }
+                                        } catch (e) {
+                                            console.error("Save error:", e);
+                                            toast.error("Error connecting to server", { id: toastId });
+                                        } finally {
+                                            setSavingDfd(false);
                                         }
-                                    } catch (e) {
-                                        console.error("Save error:", e);
-                                        toast.error("Error connecting to server", { id: toastId });
-                                    }
-                                }}
-                            />
-                        </Card>
+                                    }}
+                                />
+                            </div>
+
+                            {/* Preview sub-tab content */}
+                            {editorSubTab === "preview" && (
+                                <div className={previewFullscreen
+                                    ? "fixed inset-0 z-50 flex flex-col bg-background"
+                                    : ""
+                                }>
+                                    {previewFullscreen && (
+                                        <div className="px-4 py-3 border-b border-border flex justify-between items-center bg-muted/30 shrink-0">
+                                            <h3 className="text-sm font-medium">DFD Preview</h3>
+                                            <div className="flex items-center gap-2">
+                                                {previewing && (
+                                                    <span className="text-xs text-blue-500 flex items-center gap-1 animate-pulse">
+                                                        <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                                        Updating...
+                                                    </span>
+                                                )}
+                                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setPreviewFullscreen(false)} title="Exit fullscreen">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3" /><path d="M21 8h-3a2 2 0 0 1-2-2V3" /><path d="M3 16h3a2 2 0 0 1 2 2v3" /><path d="M16 21v-3a2 2 0 0 1 2-2h3" /></svg>
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    )}
+                                    <div className={`min-h-[600px] ${previewFullscreen ? "flex-1" : ""}`}>
+                                        {previewing && !previewHtml && !dfdHtml ? (
+                                            <div className="flex flex-col items-center justify-center h-full p-12">
+                                                <svg className="w-8 h-8 animate-spin text-muted-foreground/50 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                                <p className="text-sm text-muted-foreground">Generating preview...</p>
+                                            </div>
+                                        ) : (previewHtml || dfdHtml) ? (
+                                            <iframe
+                                                srcDoc={previewHtml || dfdHtml || ""}
+                                                className={`w-full border-none ${previewFullscreen ? "h-full" : "min-h-[600px] h-[70vh]"}`}
+                                                title="DFD Preview"
+                                                sandbox="allow-scripts allow-same-origin"
+                                            />
+                                        ) : (
+                                            <div className="flex flex-col items-center justify-center h-full p-12 text-center">
+                                                <Activity className="w-10 h-10 text-muted-foreground/30 mb-3" />
+                                                <p className="text-sm text-muted-foreground">No preview available yet.</p>
+                                                <p className="text-xs text-muted-foreground/60 mt-1">Make edits in the Editor tab, then switch here to see the updated diagram.</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     )}
                 </TabsContent>
             </Tabs>
