@@ -3,7 +3,7 @@ import prisma from "@/lib/db/prisma";
 import { getCurrentUser, unauthorizedResponse } from "@/lib/auth/helpers";
 import { getSignedUrl } from "@/lib/supabase/client";
 
-const PIPELINE_API = process.env.DFD_API_BASE_URL || "http://54.237.13.134:8000";
+const PIPELINE_API = process.env.DFD_API_BASE_URL || "http://54.84.243.190:8000";
 
 export async function POST(
     request: Request,
@@ -15,12 +15,12 @@ export async function POST(
     const { verticalId } = await params;
 
     let useRlm = false;
-    let processingMode: string | null = "aggressive_processing";
+    let aggressiveProcessing = true;
 
     try {
         const body = await request.json();
         if (body.use_rlm !== undefined) useRlm = body.use_rlm;
-        if (body.processing_mode !== undefined) processingMode = body.processing_mode;
+        if (body.aggressive_processing !== undefined) aggressiveProcessing = !!body.aggressive_processing;
     } catch {
         // Body is optional
     }
@@ -73,8 +73,10 @@ export async function POST(
             department: vertical.name,
             files: fileUrls,
             use_rlm: useRlm,
-            aggressive_processing: processingMode === "aggressive_processing"
+            aggressive_processing: aggressiveProcessing
         };
+
+        console.log("[Pipeline Initiate] Sending to Python backend:", JSON.stringify(payload, null, 2));
 
         const res = await fetch(`${PIPELINE_API}/api/initiate`, {
             method: "POST",

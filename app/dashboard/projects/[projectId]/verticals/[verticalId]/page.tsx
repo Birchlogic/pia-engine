@@ -310,6 +310,47 @@ export default function VerticalWorkspacePage() {
                 if (data.interactive_html) {
                     setDfdHtml(data.interactive_html);
                 }
+
+                // If dfd_json has no nodes, build nodes from actors_json + systems_json
+                const dfdHasNodes = data.dfd_json?.nodes && Array.isArray(data.dfd_json.nodes) && data.dfd_json.nodes.length > 0;
+                if (!dfdHasNodes) {
+                    const builtNodes: any[] = [];
+                    if (data.actors_json && Array.isArray(data.actors_json)) {
+                        data.actors_json.forEach((a: any) => {
+                            builtNodes.push({
+                                id: (a.name || "").toLowerCase().replace(/\s+/g, "_"),
+                                name: a.name || "",
+                                type: a.type || "PERSON",
+                                aliases: a.original_names || [],
+                                data_elements: [],
+                                risks: [],
+                                sources: [],
+                            });
+                        });
+                    }
+                    if (data.systems_json && Array.isArray(data.systems_json)) {
+                        data.systems_json.forEach((s: any) => {
+                            builtNodes.push({
+                                id: (s.name || "").toLowerCase().replace(/\s+/g, "_"),
+                                name: s.name || "",
+                                type: s.type || "SYSTEM",
+                                aliases: s.original_names || [],
+                                data_elements: [],
+                                risks: [],
+                                sources: [],
+                            });
+                        });
+                    }
+                    if (builtNodes.length > 0) {
+                        const builtDfd = {
+                            nodes: builtNodes,
+                            edges: data.flows_json || [],
+                        };
+                        setDfdData(builtDfd);
+                        setDfdJsonString(JSON.stringify(builtDfd, null, 2));
+                    }
+                }
+
                 // Schema-1
                 if (data.schema_one_json) {
                     setSchemaOne(data.schema_one_json);
@@ -583,7 +624,7 @@ export default function VerticalWorkspacePage() {
 
             const payload = {
                 use_rlm: false,
-                processing_mode: "aggressive_processing"
+                aggressive_processing: true
             };
             const res = await fetch(`/api/verticals/${verticalId}/pipeline/initiate`, {
                 method: "POST",
