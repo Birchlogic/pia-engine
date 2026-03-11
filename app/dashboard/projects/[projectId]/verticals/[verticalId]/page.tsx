@@ -663,31 +663,6 @@ export default function VerticalWorkspacePage() {
             ? (vertical.sessions || [])
             : (vertical.sessions || []).filter((s) => s.status === sessionFilter);
 
-    const handleTabChange = (targetTab: string) => {
-        if (targetTab === "matrix" || targetTab === "dfd" || targetTab === "dfd-editor") {
-            if (!hasFinalizedSessions) {
-                const hasProcessing = (vertical.sessions || []).some(s => s.status === "processing");
-                if (hasProcessing) {
-                    toast.info("Please wait while session is processing");
-                } else {
-                    toast.info("Please finalize session and generate data matrix to access these tabs");
-                }
-                return;
-            }
-
-            if (pipelineStatus === "processing" || generatingPipeline) {
-                toast.info("Please wait while Data Matrix is generating");
-                return;
-            }
-
-            if (!hasDataMatrix) {
-                toast.info("Please generate Data Matrix to access these tabs");
-                return;
-            }
-        }
-        setActiveTab(targetTab);
-    };
-
     return (
         <div className="space-y-6 min-w-0 overflow-hidden">
             {/* Breadcrumb */}
@@ -725,7 +700,7 @@ export default function VerticalWorkspacePage() {
                 </div>
             </div>
 
-            <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
                 <TabsList>
                     <TabsTrigger value="sessions">Sessions ({(vertical.sessions || []).length})</TabsTrigger>
                     <TabsTrigger value="matrix">Data Matrix</TabsTrigger>
