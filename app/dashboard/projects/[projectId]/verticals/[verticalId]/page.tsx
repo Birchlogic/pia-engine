@@ -1330,47 +1330,64 @@ export default function VerticalWorkspacePage() {
                                     </div>
                                     <CollapsibleContent>
                                         <div className="p-6 pt-0 w-full overflow-hidden">
-                                            <div className="overflow-x-auto rounded-lg border w-full">
-                                                <table className="w-full min-w-max text-sm">
-                                                    <thead>
-                                                        <tr className="bg-muted/50">
-                                                            <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">S.No</th>
-                                                            <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Data Category</th>
-                                                            <th className="px-4 py-3 text-left font-semibold">Description</th>
-                                                            <th className="px-4 py-3 text-left font-semibold">Purpose</th>
-                                                            <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Data Owner</th>
-                                                            <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Storage Location</th>
-                                                            <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Data Classification</th>
-                                                            <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Retention Period</th>
-                                                            <th className="px-4 py-3 text-left font-semibold whitespace-nowrap">Legal Basis</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {matrixRows.map((row, idx) => (
-                                                            <tr key={row.id} className={idx % 2 === 0 ? "bg-background" : "bg-muted/20"}>
-                                                                <td className="px-4 py-3 font-medium">{row.sNo}</td>
-                                                                <td className="px-4 py-3 font-medium">{row.dataCategory}</td>
-                                                                <td className="px-4 py-3 break-words">{row.description}</td>
-                                                                <td className="px-4 py-3 break-words">{row.purpose}</td>
-                                                                <td className="px-4 py-3">{row.dataOwner}</td>
-                                                                <td className="px-4 py-3">{row.storageLocation}</td>
-                                                                <td className="px-4 py-3">
-                                                                    <Badge variant={
-                                                                        row.dataClassification.toLowerCase().includes("pii") || row.dataClassification.toLowerCase().includes("sensitive")
-                                                                            ? "destructive"
-                                                                            : row.dataClassification.toLowerCase().includes("confidential")
-                                                                                ? "default"
-                                                                                : "secondary"
-                                                                    }>
-                                                                        {row.dataClassification}
-                                                                    </Badge>
-                                                                </td>
-                                                                <td className="px-4 py-3">{row.retentionPeriod}</td>
-                                                                <td className="px-4 py-3">{row.legalBasis}</td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4 pb-4">
+                                                {matrixRows.map((row, idx) => (
+                                                    <Card key={row.id} className="flex flex-col overflow-hidden transition-all hover:shadow-md border-border/50">
+                                                        <div className="bg-muted/30 px-5 py-3 border-b flex items-start justify-between gap-4">
+                                                            <div className="flex items-center gap-2.5">
+                                                                <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-semibold shrink-0">
+                                                                    {row.sNo}
+                                                                </div>
+                                                                <h4 className="font-semibold text-base line-clamp-1" title={row.dataCategory}>
+                                                                    {row.dataCategory}
+                                                                </h4>
+                                                            </div>
+                                                            <Badge variant={
+                                                                row.dataClassification.toLowerCase().includes("pii") || row.dataClassification.toLowerCase().includes("sensitive")
+                                                                    ? "destructive"
+                                                                    : row.dataClassification.toLowerCase().includes("confidential")
+                                                                        ? "default"
+                                                                        : "secondary"
+                                                            } className="shrink-0">
+                                                                {row.dataClassification}
+                                                            </Badge>
+                                                        </div>
+                                                        <CardContent className="p-5 flex-1 flex flex-col gap-4">
+                                                            <div className="space-y-1.5">
+                                                                <span className="text-xs font-semibold uppercase text-muted-foreground">Description</span>
+                                                                <p className="text-sm text-foreground/90 leading-relaxed">
+                                                                    {row.description}
+                                                                </p>
+                                                            </div>
+
+                                                            <div className="space-y-1.5">
+                                                                <span className="text-xs font-semibold uppercase text-muted-foreground">Purpose</span>
+                                                                <p className="text-sm text-muted-foreground leading-relaxed">
+                                                                    {row.purpose}
+                                                                </p>
+                                                            </div>
+
+                                                            <div className="mt-auto pt-4 flex flex-wrap gap-2">
+                                                                <div className="flex items-center gap-1.5 bg-secondary/50 px-2.5 py-1 rounded-md text-xs text-secondary-foreground" title="Data Owner">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 opacity-70"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+                                                                    <span className="truncate max-w-[120px]">{row.dataOwner}</span>
+                                                                </div>
+                                                                <div className="flex items-center gap-1.5 bg-secondary/50 px-2.5 py-1 rounded-md text-xs text-secondary-foreground" title="Storage Location">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 opacity-70"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" /><line x1="7" y1="7" x2="7.01" y2="7" /></svg>
+                                                                    <span className="truncate max-w-[120px]">{row.storageLocation}</span>
+                                                                </div>
+                                                                <div className="flex items-center gap-1.5 bg-secondary/50 px-2.5 py-1 rounded-md text-xs text-secondary-foreground" title="Retention Period">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 opacity-70"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+                                                                    <span>{row.retentionPeriod}</span>
+                                                                </div>
+                                                                <div className="flex items-center gap-1.5 bg-secondary/50 px-2.5 py-1 rounded-md text-xs text-secondary-foreground" title="Legal Basis">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 opacity-70"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
+                                                                    <span className="truncate max-w-[140px]">{row.legalBasis}</span>
+                                                                </div>
+                                                            </div>
+                                                        </CardContent>
+                                                    </Card>
+                                                ))}
                                             </div>
                                         </div>
                                     </CollapsibleContent>
