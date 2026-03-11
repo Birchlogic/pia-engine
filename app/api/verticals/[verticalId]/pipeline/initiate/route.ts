@@ -3,7 +3,7 @@ import prisma from "@/lib/db/prisma";
 import { getCurrentUser, unauthorizedResponse } from "@/lib/auth/helpers";
 import { getSignedUrl } from "@/lib/supabase/client";
 
-const PIPELINE_API = process.env.DFD_API_BASE_URL || "http://54.84.243.190:8000";
+const PIPELINE_API = process.env.DFD_API_BASE_URL || "http://100.53.49.231:8000";
 
 export async function POST(
     request: Request,
