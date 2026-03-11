@@ -346,7 +346,7 @@ export default function VerticalWorkspacePage() {
                             nodes: builtNodes,
                             edges: data.flows_json || [],
                         };
-                        setDfdData(builtDfd);
+                        setDfdData(builtDfd as any);
                         setDfdJsonString(JSON.stringify(builtDfd, null, 2));
                     }
                 }
@@ -1822,12 +1822,59 @@ export default function VerticalWorkspacePage() {
 
                 {/* ────────────── DFD Editor Tab ────────────── */}
                 <TabsContent value="dfd-editor" className="space-y-0">
-                    {dfdLoading || !dfdData ? (
+                    {dfdLoading || (!dfdData && !knowledgeGraph) ? (
                         <div className="space-y-3">
                             <Skeleton className="h-64 w-full" />
                             <p className="text-sm text-muted-foreground text-center">Loading editor data...</p>
                         </div>
-                    ) : (
+                    ) : (() => {
+                        // Prefer knowledgeGraph JSON data, fall back to dfdData
+                        const kgNodes = knowledgeGraph?.nodes || [];
+                        const kgEdges = knowledgeGraph?.edges || [];
+                        const dfdNodes = (dfdData as any)?.nodes || [];
+                        const dfdEdges = (dfdData as any)?.edges || [];
+                        const useKg = kgNodes.length > 0;
+                        const editorNodes = useKg
+                            ? kgNodes.map((n: any) => ({
+                                id: n.id || n.node_id || "",
+                                name: n.name || "",
+                                type: n.type || "unknown",
+                                aliases: n.aliases || [],
+                                data_elements: n.data_elements || [],
+                                risks: n.risks || [],
+                                sources: n.sources || [],
+                            }))
+                            : dfdNodes.map((n: any) => ({
+                                id: n.id || n.node_id || "",
+                                name: n.name || "",
+                                type: n.type || "unknown",
+                                aliases: n.aliases || [],
+                                data_elements: n.data_elements || [],
+                                risks: n.risks || [],
+                                sources: n.sources || [],
+                            }));
+                        const editorEdges = useKg
+                            ? kgEdges.map((e: any) => ({
+                                source: e.source || e.source_node || "",
+                                target: e.target || e.target_node || "",
+                                data_elements: e.data_elements || [],
+                                flow_type: e.flow_type || "",
+                                channel: e.channel || "",
+                                inferred: e.inferred ?? false,
+                                sources: e.sources || [],
+                            }))
+                            : dfdEdges.map((e: any) => ({
+                                source: e.source || e.source_node || "",
+                                target: e.target || e.target_node || "",
+                                data_elements: e.data_elements || [],
+                                flow_type: e.flow_type || "",
+                                channel: e.channel || "",
+                                inferred: e.inferred ?? false,
+                                sources: e.sources || [],
+                            }));
+                        const editorLevels = renderPlan?.levels || (dfdData as any)?.dfd_render_plan?.levels || [];
+
+                        return (
                         <div className="bg-card text-card-foreground rounded-lg border border-border shadow-sm overflow-hidden">
                             {/* Sub-tab header */}
                             <div className="flex items-center justify-between border-b border-border px-4 py-2 bg-muted/30">
@@ -1845,17 +1892,9 @@ export default function VerticalWorkspacePage() {
                                         onClick={() => {
                                             setEditorSubTab("preview");
                                             // Auto-trigger preview when switching to preview tab
-                                            const nodes = editedNodes.length > 0 ? editedNodes : (dfdData?.nodes || []).map((n: any) => ({
-                                                id: n.id || n.node_id || "", name: n.name || "", type: n.type || "unknown",
-                                                aliases: n.aliases || [], data_elements: n.data_elements || [],
-                                                risks: n.risks || [], sources: n.sources || [],
-                                            }));
-                                            const edges = editedEdges.length > 0 ? editedEdges : (dfdData?.edges || []).map((e: any) => ({
-                                                source: e.source || e.source_node || "", target: e.target || e.target_node || "",
-                                                data_elements: e.data_elements || [], flow_type: e.flow_type || "",
-                                                channel: e.channel || "", inferred: e.inferred ?? false, sources: e.sources || [],
-                                            }));
-                                            const levels = editedLevels.length > 0 ? editedLevels : (renderPlan?.levels || dfdData?.dfd_render_plan?.levels || []);
+                                            const nodes = editedNodes.length > 0 ? editedNodes : editorNodes;
+                                            const edges = editedEdges.length > 0 ? editedEdges : editorEdges;
+                                            const levels = editedLevels.length > 0 ? editedLevels : editorLevels;
                                             setPreviewing(true);
                                             fetch("/api/dfd/preview", {
                                                 method: "POST",
@@ -1899,25 +1938,9 @@ export default function VerticalWorkspacePage() {
                             {/* Editor sub-tab content — always mounted, hidden when preview is active */}
                             <div className={`p-4 ${editorSubTab !== "editor" ? "hidden" : ""}`}>
                                 <ListBasedDfdEditor
-                                    initialNodes={(dfdData?.nodes || []).map((n: any) => ({
-                                        id: n.id || n.node_id || "",
-                                        name: n.name || "",
-                                        type: n.type || "unknown",
-                                        aliases: n.aliases || [],
-                                        data_elements: n.data_elements || [],
-                                        risks: n.risks || [],
-                                        sources: n.sources || [],
-                                    }))}
-                                    initialEdges={(dfdData?.edges || []).map((e: any) => ({
-                                        source: e.source || e.source_node || "",
-                                        target: e.target || e.target_node || "",
-                                        data_elements: e.data_elements || [],
-                                        flow_type: e.flow_type || "",
-                                        channel: e.channel || "",
-                                        inferred: e.inferred ?? false,
-                                        sources: e.sources || [],
-                                    }))}
-                                    initialLevels={renderPlan?.levels || dfdData?.dfd_render_plan?.levels || []}
+                                    initialNodes={editorNodes}
+                                    initialEdges={editorEdges}
+                                    initialLevels={editorLevels}
                                     previewing={previewing}
                                     saving={savingDfd}
                                     onChanged={(nodes, edges, levels) => {
@@ -1997,13 +2020,14 @@ export default function VerticalWorkspacePage() {
                                                 <Activity className="w-10 h-10 text-muted-foreground/30 mb-3" />
                                                 <p className="text-sm text-muted-foreground">No preview available yet.</p>
                                                 <p className="text-xs text-muted-foreground/60 mt-1">Make edits in the Editor tab, then switch here to see the updated diagram.</p>
-                                            </div>
-                                        )}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
-                            )}
-                        </div>
-                    )}
+                                )}
+                            </div>
+                        );
+                    })()}
                 </TabsContent>
             </Tabs>
 
