@@ -221,10 +221,6 @@ export default function VerticalWorkspacePage() {
     const [pipelineStatus, setPipelineStatus] = useState<string>("not_started");
     const [generatingPipeline, setGeneratingPipeline] = useState(false);
 
-    // Mode Selection Modal
-    const [modeModalOpen, setModeModalOpen] = useState(false);
-    const [selectedMode, setSelectedMode] = useState<"rlm" | "aggressive" | "normal">("aggressive");
-
     // Source of Truth (Schema-1)
     const [schemaOne, setSchemaOne] = useState<SchemaOneFull | null>(null);
     const [schemaLoading, setSchemaLoading] = useState(false);
@@ -568,16 +564,12 @@ export default function VerticalWorkspacePage() {
 
 
 
-    const handleGenerateMatrix = () => {
+    const handleGenerateMatrix = async () => {
         if (isCoolingDown) {
             toast.warning(`Please wait ${cooldownSeconds}s before generating again`);
             return;
         }
-        setModeModalOpen(true);
-    };
 
-    const confirmGenerateMatrix = async () => {
-        setModeModalOpen(false);
         setGeneratingPipeline(true);
         setPipelineStatus("processing");
         const toastId = toast.loading("Preparing to generate new Data Matrix...", { id: "matrix-gen" });
@@ -590,8 +582,8 @@ export default function VerticalWorkspacePage() {
             toast.loading("Initiating unified pipeline in background...", { id: toastId });
 
             const payload = {
-                use_rlm: selectedMode === "rlm",
-                processing_mode: selectedMode === "aggressive" ? "aggressive_processing" : selectedMode === "normal" ? "standard_processing" : null
+                use_rlm: false,
+                processing_mode: "aggressive_processing"
             };
             const res = await fetch(`/api/verticals/${verticalId}/pipeline/initiate`, {
                 method: "POST",
@@ -671,6 +663,31 @@ export default function VerticalWorkspacePage() {
             ? (vertical.sessions || [])
             : (vertical.sessions || []).filter((s) => s.status === sessionFilter);
 
+    const handleTabChange = (targetTab: string) => {
+        if (targetTab === "matrix" || targetTab === "dfd" || targetTab === "dfd-editor") {
+            if (!hasFinalizedSessions) {
+                const hasProcessing = (vertical.sessions || []).some(s => s.status === "processing");
+                if (hasProcessing) {
+                    toast.info("Please wait while session is processing");
+                } else {
+                    toast.info("Please finalize session and generate data matrix to access these tabs");
+                }
+                return;
+            }
+
+            if (pipelineStatus === "processing" || generatingPipeline) {
+                toast.info("Please wait while Data Matrix is generating");
+                return;
+            }
+
+            if (!hasDataMatrix) {
+                toast.info("Please generate Data Matrix to access these tabs");
+                return;
+            }
+        }
+        setActiveTab(targetTab);
+    };
+
     return (
         <div className="space-y-6 min-w-0 overflow-hidden">
             {/* Breadcrumb */}
@@ -708,7 +725,7 @@ export default function VerticalWorkspacePage() {
                 </div>
             </div>
 
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+            <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
                 <TabsList>
                     <TabsTrigger value="sessions">Sessions ({(vertical.sessions || []).length})</TabsTrigger>
                     <TabsTrigger value="matrix">Data Matrix</TabsTrigger>
@@ -2045,68 +2062,6 @@ export default function VerticalWorkspacePage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog >
-
-            {/* Mode Selection Dialog */}
-            <Dialog open={modeModalOpen} onOpenChange={setModeModalOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Generate Data Matrix</DialogTitle>
-                        <DialogDescription>
-                            Select the processing engine mode for generating the Data Matrix and Schemas.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="py-4 space-y-4">
-                        <label className="flex items-start space-x-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 border-slate-200 dark:border-slate-800">
-                            <input
-                                type="radio"
-                                name="processingMode"
-                                value="rlm"
-                                checked={selectedMode === "rlm"}
-                                onChange={() => setSelectedMode("rlm")}
-                                className="mt-1"
-                            />
-                            <div>
-                                <p className="font-medium text-sm">RLM Ingestion <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300">Medium Accuracy</span></p>
-                                <p className="text-xs text-muted-foreground">Reasoning language model based extraction and ingestion.</p>
-                            </div>
-                        </label>
-                        <label className="flex items-start space-x-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 border-slate-200 dark:border-slate-800">
-                            <input
-                                type="radio"
-                                name="processingMode"
-                                value="aggressive"
-                                checked={selectedMode === "aggressive"}
-                                onChange={() => setSelectedMode("aggressive")}
-                                className="mt-1"
-                            />
-                            <div>
-                                <p className="font-medium text-sm">Deterministic, NLP and AI <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">High Accuracy</span></p>
-                                <p className="text-xs text-muted-foreground">Advanced multi-layer processing combining deterministic rules, NLP, and AI extraction.</p>
-                            </div>
-                        </label>
-                        <label className="flex items-start space-x-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 border-slate-200 dark:border-slate-800">
-                            <input
-                                type="radio"
-                                name="processingMode"
-                                value="normal"
-                                checked={selectedMode === "normal"}
-                                onChange={() => setSelectedMode("normal")}
-                                className="mt-1"
-                            />
-                            <div>
-                                <p className="font-medium text-sm">Normal <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300">Low Accuracy</span></p>
-                                <p className="text-xs text-muted-foreground">Basic processing and extraction.</p>
-                            </div>
-                        </label>
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setModeModalOpen(false)}>Cancel</Button>
-                        <Button onClick={confirmGenerateMatrix} disabled={generatingPipeline}>
-                            {generatingPipeline ? "Initiating..." : "Generate Now"}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
         </div >
     );
 }
