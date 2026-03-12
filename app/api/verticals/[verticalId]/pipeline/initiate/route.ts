@@ -4,7 +4,7 @@ import { getCurrentUser, unauthorizedResponse } from "@/lib/auth/helpers";
 import { getSignedUrl } from "@/lib/supabase/client";
 import { SignJWT } from "jose";
 
-const PIPELINE_API = process.env.DFD_API_BASE_URL || "http://54.227.129.31:8000";
+const PIPELINE_API = process.env.DFD_API_BASE_URL || "http://54.221.187.254:8000";
 
 function getPayloadSecret(): Uint8Array {
     const secret = process.env.PAYLOAD_TOKEN;
