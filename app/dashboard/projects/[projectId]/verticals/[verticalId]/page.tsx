@@ -594,7 +594,13 @@ export default function VerticalWorkspacePage() {
                 setDeletingSession(false);
             } else {
                 const data = await res.json();
-                toast.error(data.error || "Failed to delete session");
+                let errorMsg = "Failed to delete session";
+                if (typeof data.error === "string") {
+                    errorMsg = data.error;
+                } else if (data.error && typeof data.error === "object") {
+                    errorMsg = "Validation error: " + JSON.stringify(data.error);
+                }
+                toast.error(errorMsg);
             }
         } catch (error) {
             console.error("Error deleting session:", error);
@@ -636,7 +642,17 @@ export default function VerticalWorkspacePage() {
                 toast.success("Processing started! We're continuously monitoring the status and will update you automatically.", { id: toastId, duration: 5000 });
                 startCooldown();
             } else {
-                toast.error(data.error || "Failed to start pipeline", { id: toastId });
+                let errorMsg = "Failed to start pipeline";
+                if (typeof data.error === "string") {
+                    errorMsg = data.error;
+                } else if (data.error && typeof data.error === "object") {
+                    errorMsg = "Validation error: " + JSON.stringify(data.error);
+                } else if (data.detail && typeof data.detail === "string") {
+                    errorMsg = data.detail;
+                } else if (data.detail && typeof data.detail === "object") {
+                    errorMsg = "Validation error: " + JSON.stringify(data.detail);
+                }
+                toast.error(errorMsg, { id: toastId });
                 setGeneratingPipeline(false);
                 setPipelineStatus("not_started");
             }

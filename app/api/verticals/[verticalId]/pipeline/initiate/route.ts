@@ -2,8 +2,17 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/db/prisma";
 import { getCurrentUser, unauthorizedResponse } from "@/lib/auth/helpers";
 import { getSignedUrl } from "@/lib/supabase/client";
+import { SignJWT } from "jose";
 
-const PIPELINE_API = process.env.DFD_API_BASE_URL || "http://100.53.49.231:8000";
+const PIPELINE_API = process.env.DFD_API_BASE_URL || "http://34.232.76.135:8000";
+
+function getPayloadSecret(): Uint8Array {
+    const secret = process.env.PAYLOAD_TOKEN;
+    if (!secret) {
+        throw new Error("PAYLOAD_TOKEN is not set in environment variables");
+    }
+    return new TextEncoder().encode(secret);
+}
 
 export async function POST(
     request: Request,
@@ -42,6 +51,18 @@ export async function POST(
         );
     }
 
+    // Get the active LLM Provider configuration
+    const activeProvider = await prisma.llmProvider.findFirst({
+        where: { status: "ACTIVE" },
+    });
+
+    if (!activeProvider) {
+        return NextResponse.json(
+            { error: "No active LLM provider configured. Please contact the administrator." },
+            { status: 400 }
+        );
+    }
+
     // Gather signed URLs for every uploaded file across finalized sessions
     const fileUrls: string[] = [];
     for (const session of vertical.sessions) {
@@ -68,7 +89,7 @@ export async function POST(
             console.warn("Pre-delete of existing session failed (non-blocking):", deleteErr);
         }
 
-        const payload = {
+        const payloadData = {
             session_id: verticalId,
             department: vertical.name,
             files: fileUrls,
@@ -76,12 +97,29 @@ export async function POST(
             aggressive_processing: aggressiveProcessing
         };
 
-        console.log("[Pipeline Initiate] Sending to Python backend:", JSON.stringify(payload, null, 2));
+        const fullPayload = {
+            ai_config: {
+                type: activeProvider.type,
+                model: activeProvider.model,
+                apiKey: activeProvider.apiKey,
+            },
+            data: payloadData
+        };
+
+        const token = await new SignJWT(fullPayload as any)
+            .setProtectedHeader({ alg: "HS256" })
+            .setIssuedAt()
+            .setExpirationTime("15m")
+            .sign(getPayloadSecret());
+
+        const finalBody = { token };
+
+        console.log(`[Pipeline Initiate] Sending signed JWT token to Python backend. Token payload:`, finalBody);
 
         const res = await fetch(`${PIPELINE_API}/api/initiate`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
+            body: JSON.stringify(finalBody),
         });
 
         if (!res.ok) {
@@ -95,6 +133,13 @@ export async function POST(
         const data = await res.json();
         return NextResponse.json(data, { status: 200 });
     } catch (err) {
+        if (err instanceof Error && err.message.includes("PAYLOAD_TOKEN")) {
+            console.error("Configuration error:", err.message);
+            return NextResponse.json(
+                { error: "Server configuration error (missing PAYLOAD_TOKEN)." },
+                { status: 500 }
+            );
+        }
         console.error("Error communicating with Pipeline API:", err);
         return NextResponse.json(
             { error: "Internal server error communicating with Pipeline API" },

@@ -2,8 +2,15 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/db/prisma";
 import { getCurrentUser } from "@/lib/auth/helpers";
 import { unauthorizedResponse, forbiddenResponse, serverErrorResponse } from "@/lib/auth/responses";
+import { SignJWT } from "jose";
 
-const PIPELINE_API = process.env.DFD_API_BASE_URL || "http://100.53.49.231:8000";
+const PIPELINE_API = process.env.DFD_API_BASE_URL || "http://34.232.76.135:8000";
+
+function getPayloadSecret(): Uint8Array {
+    const secret = process.env.PAYLOAD_TOKEN;
+    if (!secret) throw new Error("PAYLOAD_TOKEN is not set in environment variables");
+    return new TextEncoder().encode(secret);
+}
 
 export async function POST(request: Request) {
     try {
@@ -41,8 +48,19 @@ export async function POST(request: Request) {
             return forbiddenResponse("Access denied");
         }
 
+        // Get the active LLM Provider configuration
+        const activeProvider = await prisma.llmProvider.findFirst({
+            where: { status: "ACTIVE" },
+        });
+
+        if (!activeProvider) {
+            return NextResponse.json(
+                { error: "No active LLM provider configured. Please contact the administrator." },
+                { status: 400 }
+            );
+        }
+
         // Build the override object for Prisma storage
-        // Support both new format (nodes/edges/levels) and legacy format (dfd_json/knowledge_graph/dfd_plan_json)
         const overrideData: any = {};
         if (nodes && edges) {
             // New format: store the preview-format data as knowledge_graph equivalent
@@ -88,15 +106,28 @@ export async function POST(request: Request) {
                 ? { session_id, nodes, edges, levels: levels || [], pipeline_docs: pipeline_docs || {} }
                 : { session_id, dfd_json, knowledge_graph, dfd_plan_json };
 
+            const fullPayload = {
+                ai_config: { type: activeProvider.type, model: activeProvider.model, apiKey: activeProvider.apiKey },
+                data: backendBody
+            };
+
+            const token = await new SignJWT(fullPayload as any)
+                .setProtectedHeader({ alg: "HS256" })
+                .setIssuedAt()
+                .setExpirationTime("15m")
+                .sign(getPayloadSecret());
+
             const backendRes = await fetch(`${PIPELINE_API}/api/dfd/update_session`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(backendBody),
+                body: JSON.stringify({ token }),
             });
 
             if (backendRes.ok) {
                 const backendData = await backendRes.json();
                 backendHtml = backendData.html || null;
+            } else {
+                console.error("Pipeline responded with error", backendRes.status);
             }
         } catch (error) {
             console.error("Failed to forward DFD update to backend engine:", error);
@@ -109,6 +140,9 @@ export async function POST(request: Request) {
         });
 
     } catch (err) {
+        if (err instanceof Error && err.message.includes("PAYLOAD_TOKEN")) {
+            return serverErrorResponse();
+        }
         console.error("Error in /api/dfd/update_session:", err);
         return serverErrorResponse();
     }

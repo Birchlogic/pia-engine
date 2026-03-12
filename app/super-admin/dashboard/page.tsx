@@ -35,6 +35,16 @@ interface OrgUser {
     } | null;
 }
 
+interface LlmProviderConfig {
+    id: string;
+    type: string;
+    model: string;
+    apiKey: string;
+    status: string;
+    createdAt: string;
+    admin: { email: string };
+}
+
 // ─── API Helper ───
 
 function useApi() {
@@ -120,6 +130,12 @@ export default function SuperAdminDashboard() {
     const [assignRole, setAssignRole] = useState("analyst");
     const [formLoading, setFormLoading] = useState(false);
 
+    // LLM Provider State
+    const [llmProviders, setLlmProviders] = useState<LlmProviderConfig[]>([]);
+    const [llmLoading, setLlmLoading] = useState(false);
+    const [showAddProvider, setShowAddProvider] = useState(false);
+    const [providerForm, setProviderForm] = useState({ type: "CLAUDE", model: "", apiKey: "" });
+
     const adminEmail = typeof window !== "undefined" ? localStorage.getItem("superAdminEmail") : "";
 
     // ─── Load orgs ───
@@ -142,6 +158,7 @@ export default function SuperAdminDashboard() {
             return;
         }
         loadOrgs();
+        loadLlmProviders();
     }, [router, loadOrgs]);
 
     // ─── Load users for selected org ───
@@ -333,6 +350,77 @@ export default function SuperAdminDashboard() {
         router.push("/super-admin");
     }
 
+    // ─── LLM Provider CRUD ───
+    const loadLlmProviders = useCallback(async () => {
+        try {
+            setLlmLoading(true);
+            const data = await apiFetch("/api/super-admin/llm-providers");
+            if (data.success) setLlmProviders(data.data);
+        } catch {
+            // handled
+        } finally {
+            setLlmLoading(false);
+        }
+    }, [apiFetch]);
+
+    async function handleAddProvider(e: React.FormEvent) {
+        e.preventDefault();
+        setFormLoading(true);
+        try {
+            const data = await apiFetch("/api/super-admin/llm-providers", {
+                method: "POST",
+                body: JSON.stringify(providerForm),
+            });
+            if (!data.success) {
+                toast.error(data.message || "Failed to add provider");
+                return;
+            }
+            toast.success("Provider added successfully");
+            setShowAddProvider(false);
+            setProviderForm({ type: "CLAUDE", model: "", apiKey: "" });
+            loadLlmProviders();
+        } catch {
+            toast.error("Failed to add provider");
+        } finally {
+            setFormLoading(false);
+        }
+    }
+
+    async function handleActivateProvider(providerId: string) {
+        try {
+            const data = await apiFetch(`/api/super-admin/llm-providers/${providerId}`, {
+                method: "PATCH",
+                body: JSON.stringify({ status: "ACTIVE" }),
+            });
+            if (data.success) {
+                toast.success("Provider activated");
+                loadLlmProviders();
+            } else {
+                toast.error(data.message || "Failed to activate");
+            }
+        } catch {
+            toast.error("Error activating provider");
+        }
+    }
+
+    async function handleDeleteProvider(providerId: string) {
+        try {
+            const data = await apiFetch(`/api/super-admin/llm-providers/${providerId}`, {
+                method: "DELETE",
+            });
+            if (data.success) {
+                toast.success("Provider deleted");
+                loadLlmProviders();
+            } else {
+                toast.error(data.message || "Failed to delete");
+            }
+        } catch {
+            toast.error("Error deleting provider");
+        }
+    }
+
+    const activeProvider = llmProviders.find((p) => p.status === "ACTIVE");
+
     // Filter platform users: show users that are active and not in the currently selected org
     const availableUsersToAssign = allUsers.filter(u => u.isActive && u.orgId !== selectedOrg);
 
@@ -389,6 +477,108 @@ export default function SuperAdminDashboard() {
                         </CardContent>
                     </Card>
                 </div>
+
+                {/* LLM Providers Section */}
+                <Card className="mb-8">
+                    <CardHeader className="flex flex-row items-center justify-between pb-4">
+                        <div>
+                            <CardTitle className="text-base">LLM Providers</CardTitle>
+                            <CardDescription className="text-xs">Manage AI model configurations. Only one provider can be active at a time.</CardDescription>
+                        </div>
+                        <Button size="sm" onClick={() => setShowAddProvider(true)}>
+                            Add Provider
+                        </Button>
+                    </CardHeader>
+                    <CardContent className="p-0 border-t">
+                        {/* Active Provider Banner */}
+                        {activeProvider && (
+                            <div className="mx-4 mt-4 mb-2 p-3 rounded-lg bg-green-500/10 border border-green-500/30 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                                    <div>
+                                        <p className="text-sm font-medium">Active: <span className="text-green-600 dark:text-green-400">{activeProvider.type}</span></p>
+                                        <p className="text-xs text-muted-foreground">Model: {activeProvider.model}</p>
+                                    </div>
+                                </div>
+                                <span className="inline-flex items-center rounded-sm px-2 py-0.5 text-[10px] font-semibold bg-green-500/20 text-green-700 dark:text-green-400 uppercase">Active</span>
+                            </div>
+                        )}
+                        {!activeProvider && !llmLoading && (
+                            <div className="mx-4 mt-4 mb-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                                <p className="text-sm text-amber-600 dark:text-amber-400">⚠ No active LLM provider. Add and activate one to enable AI features.</p>
+                            </div>
+                        )}
+
+                        {llmLoading ? (
+                            <div className="p-8 text-center text-muted-foreground text-sm">Loading providers...</div>
+                        ) : llmProviders.length === 0 ? (
+                            <div className="p-8 text-center text-muted-foreground text-sm">
+                                No providers configured yet. Click "Add Provider" to get started.
+                            </div>
+                        ) : (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Provider</TableHead>
+                                        <TableHead>Model</TableHead>
+                                        <TableHead>API Key</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead>Added By</TableHead>
+                                        <TableHead className="text-right">Actions</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {llmProviders.map((p) => (
+                                        <TableRow key={p.id}>
+                                            <TableCell>
+                                                <span className={`inline-flex items-center rounded-sm px-2 py-0.5 text-xs font-semibold uppercase ${
+                                                    p.type === "CLAUDE" ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
+                                                    : p.type === "OPENAI" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                                                    : "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400"
+                                                }`}>
+                                                    {p.type}
+                                                </span>
+                                            </TableCell>
+                                            <TableCell className="font-mono text-xs">{p.model}</TableCell>
+                                            <TableCell className="font-mono text-xs text-muted-foreground">{p.apiKey}</TableCell>
+                                            <TableCell>
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className={`w-1.5 h-1.5 rounded-full ${p.status === "ACTIVE" ? "bg-green-500" : "bg-gray-400"}`} />
+                                                    <span className="text-xs">{p.status}</span>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="text-xs text-muted-foreground">{p.admin?.email || "—"}</TableCell>
+                                            <TableCell className="text-right">
+                                                <div className="flex items-center justify-end gap-1">
+                                                    {p.status !== "ACTIVE" && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="h-7 px-2 text-xs text-green-600 hover:text-green-700 hover:bg-green-50"
+                                                            onClick={() => handleActivateProvider(p.id)}
+                                                        >
+                                                            Activate
+                                                        </Button>
+                                                    )}
+                                                    {p.status !== "ACTIVE" && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                                                            onClick={() => handleDeleteProvider(p.id)}
+                                                        >
+                                                            Delete
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        )}
+                    </CardContent>
+                </Card>
 
                 {/* Main layout */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -791,6 +981,67 @@ export default function SuperAdminDashboard() {
                             {formLoading ? "Deactivating..." : "Deactivate User"}
                         </Button>
                     </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* ─── Add LLM Provider Modal ─── */}
+            <Dialog open={showAddProvider} onOpenChange={setShowAddProvider}>
+                <DialogContent className="sm:max-w-[450px]">
+                    <form onSubmit={handleAddProvider}>
+                        <DialogHeader>
+                            <DialogTitle>Add LLM Provider</DialogTitle>
+                            <DialogDescription>
+                                Configure a new AI model provider. You can activate it after adding.
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="grid gap-4 py-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="providerType">Provider Type *</Label>
+                                <select
+                                    id="providerType"
+                                    value={providerForm.type}
+                                    onChange={(e) => setProviderForm({ ...providerForm, type: e.target.value })}
+                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                                >
+                                    <option value="CLAUDE">Claude (Anthropic)</option>
+                                    <option value="OPENAI">OpenAI</option>
+                                    <option value="OPENROUTER">OpenRouter</option>
+                                </select>
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="modelName">Model Name *</Label>
+                                <Input
+                                    id="modelName"
+                                    placeholder={providerForm.type === "CLAUDE" ? "claude-sonnet-4-20250514" : providerForm.type === "OPENAI" ? "gpt-4o" : "anthropic/claude-sonnet-4-20250514"}
+                                    value={providerForm.model}
+                                    onChange={(e) => setProviderForm({ ...providerForm, model: e.target.value })}
+                                    required
+                                />
+                                <p className="text-[10px] text-muted-foreground">The exact model identifier from the provider.</p>
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="providerApiKey">API Key *</Label>
+                                <Input
+                                    id="providerApiKey"
+                                    type="password"
+                                    placeholder="sk-..."
+                                    value={providerForm.apiKey}
+                                    onChange={(e) => setProviderForm({ ...providerForm, apiKey: e.target.value })}
+                                    required
+                                />
+                            </div>
+                        </div>
+
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setShowAddProvider(false)} disabled={formLoading}>
+                                Cancel
+                            </Button>
+                            <Button type="submit" disabled={formLoading}>
+                                {formLoading ? "Adding..." : "Add Provider"}
+                            </Button>
+                        </DialogFooter>
+                    </form>
                 </DialogContent>
             </Dialog>
 

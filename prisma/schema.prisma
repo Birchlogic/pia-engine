@@ -10,10 +10,11 @@ datasource db {
 // ─── Super Admin (separate from org users, API-only) ───
 
 model SuperAdmin {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  createdAt DateTime @default(now()) @map("created_at")
+  id           String        @id @default(uuid())
+  email        String        @unique
+  password     String
+  createdAt    DateTime      @default(now()) @map("created_at")
+  llmProviders LlmProvider[]
 
   @@map("super_admins")
 }
@@ -231,4 +232,32 @@ enum TranscriptionStatus {
   processing
   completed
   failed
+}
+
+// ─── LLM Provider Management ───
+
+enum LlmProviderType {
+  CLAUDE
+  OPENAI
+  OPENROUTER
+}
+
+enum LlmProviderStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model LlmProvider {
+  id        String            @id @default(uuid())
+  type      LlmProviderType
+  model     String
+  apiKey    String            @map("api_key")
+  addedBy   String            @map("added_by")
+  status    LlmProviderStatus @default(INACTIVE)
+  createdAt DateTime          @default(now()) @map("created_at")
+  updatedAt DateTime          @updatedAt @map("updated_at")
+
+  admin     SuperAdmin        @relation(fields: [addedBy], references: [id])
+
+  @@map("llm_providers")
 }
