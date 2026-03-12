@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth/helpers";
 import { unauthorizedResponse, forbiddenResponse, serverErrorResponse } from "@/lib/auth/responses";
 import { SignJWT } from "jose";
 
-const PIPELINE_API = process.env.DFD_API_BASE_URL || "http://34.232.76.135:8000";
+const PIPELINE_API = process.env.DFD_API_BASE_URL || "http://54.227.129.31:8000";
 
 function getPayloadSecret(): Uint8Array {
     const secret = process.env.PAYLOAD_TOKEN;
