@@ -715,20 +715,7 @@ export default function VerticalWorkspacePage() {
         if (dfdRendererRef.current) {
             dfdRendererRef.current.exportPng();
         } else if (iframeRef.current) {
-            // If it's an iframe, we might not be able to do a clean PNG export without an external library
-            // but we can try to print it which allows "Save as PDF" at least.
-            // Some newer browsers allow capturing the iframe, but it's complex.
-            toast.info("Capturing interactive diagram... If it fails, please use PDF export.");
-            try {
-                const iframe = iframeRef.current;
-                const doc = iframe.contentDocument || iframe.contentWindow?.document;
-                if (doc) {
-                    // Try to trigger print on the iframe specifically
-                    iframe.contentWindow?.print();
-                }
-            } catch (e) {
-                toast.error("Could not capture interactive diagram due to security restrictions.");
-            }
+            toast.info("PNG export is not available for the interactive DFD view. Use Export PDF or the diagram's own download controls.");
         } else {
             toast.error("No DFD available to export");
         }
@@ -738,8 +725,12 @@ export default function VerticalWorkspacePage() {
         if (dfdRendererRef.current) {
             dfdRendererRef.current.exportPdf();
         } else if (iframeRef.current) {
-            iframeRef.current.contentWindow?.focus();
-            iframeRef.current.contentWindow?.print();
+            try {
+                iframeRef.current.contentWindow?.focus();
+                iframeRef.current.contentWindow?.print();
+            } catch {
+                toast.error("PDF export failed — browser blocked printing from the embedded diagram.");
+            }
         } else {
             toast.error("No DFD available to export");
         }
