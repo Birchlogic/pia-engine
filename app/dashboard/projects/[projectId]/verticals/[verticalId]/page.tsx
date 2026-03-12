@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { DfdHtmlRenderer, type DfdData } from "@/components/dfd/DfdHtmlRenderer";
+import { DfdHtmlRenderer, type DfdData, type DfdHtmlRendererRef } from "@/components/dfd/DfdHtmlRenderer";
 import { type KnowledgeGraph, type PrivacyDfd, type RenderPlan } from "@/components/dfd/EditableDfd";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
@@ -203,6 +203,14 @@ export default function VerticalWorkspacePage() {
     const [editedNodes, setEditedNodes] = useState<any[]>([]);
     const [editedEdges, setEditedEdges] = useState<any[]>([]);
     const [editedLevels, setEditedLevels] = useState<string[][]>([]);
+
+    // Upload more files to existing session
+    const [uploadingMoreFiles, setUploadingMoreFiles] = useState<string | null>(null);
+    const addFilesInputRef = useRef<HTMLInputElement>(null);
+
+    // Refs for export
+    const dfdRendererRef = useRef<DfdHtmlRendererRef>(null);
+    const iframeRef = useRef<HTMLIFrameElement>(null);
 
     // 3-JSON DFD structures from pipeline
     const [knowledgeGraph, setKnowledgeGraph] = useState<KnowledgeGraph | null>(null);
@@ -525,6 +533,46 @@ export default function VerticalWorkspacePage() {
         }
     };
 
+    const handleAddMoreFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files || []);
+        if (files.length === 0 || !activeSession) return;
+
+        const validFiles = files.filter((f) => {
+            const ext = f.name.split(".").pop()?.toLowerCase();
+            return ext === "txt" || ext === "pdf";
+        });
+
+        if (validFiles.length === 0) {
+            toast.error("Please select valid .txt or .pdf files");
+            return;
+        }
+
+        setUploadingMoreFiles(activeSession.id);
+        const toastId = toast.loading(`Uploading ${validFiles.length} file(s) to Session #${activeSession.sessionNumber}...`);
+
+        try {
+            const formData = new FormData();
+            validFiles.forEach((file) => formData.append("files", file));
+
+            const res = await fetch(`/api/sessions/${activeSession.id}/files`, {
+                method: "POST",
+                body: formData,
+            });
+
+            if (res.ok) {
+                toast.success("Files uploaded successfully", { id: toastId });
+                fetchVertical(); // Refresh to show new files
+            } else {
+                toast.error("Failed to upload files", { id: toastId });
+            }
+        } catch (error) {
+            toast.error("Error uploading files", { id: toastId });
+        } finally {
+            setUploadingMoreFiles(null);
+            if (addFilesInputRef.current) addFilesInputRef.current.value = "";
+        }
+    };
+
     const handleSaveDfd = async () => {
         try {
             const parsedNode = JSON.parse(dfdJsonString);
@@ -663,6 +711,40 @@ export default function VerticalWorkspacePage() {
         }
     };
 
+    const handleExportPng = () => {
+        if (dfdRendererRef.current) {
+            dfdRendererRef.current.exportPng();
+        } else if (iframeRef.current) {
+            // If it's an iframe, we might not be able to do a clean PNG export without an external library
+            // but we can try to print it which allows "Save as PDF" at least.
+            // Some newer browsers allow capturing the iframe, but it's complex.
+            toast.info("Capturing interactive diagram... If it fails, please use PDF export.");
+            try {
+                const iframe = iframeRef.current;
+                const doc = iframe.contentDocument || iframe.contentWindow?.document;
+                if (doc) {
+                    // Try to trigger print on the iframe specifically
+                    iframe.contentWindow?.print();
+                }
+            } catch (e) {
+                toast.error("Could not capture interactive diagram due to security restrictions.");
+            }
+        } else {
+            toast.error("No DFD available to export");
+        }
+    };
+
+    const handleExportPdf = () => {
+        if (dfdRendererRef.current) {
+            dfdRendererRef.current.exportPdf();
+        } else if (iframeRef.current) {
+            iframeRef.current.contentWindow?.focus();
+            iframeRef.current.contentWindow?.print();
+        } else {
+            toast.error("No DFD available to export");
+        }
+    };
+
 
 
     const toggleExpanded = (id: string) => {
@@ -743,7 +825,7 @@ export default function VerticalWorkspacePage() {
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight">{vertical.name}</h1>
                     <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
-                        <span>Sessions Limit: {(vertical.sessions || []).length} / {vertical.sessionRunLimit}</span>
+                        {/* <span>Total Sessions: {(vertical.sessions || []).length}</span> */}
                         {vertical.headName && (
                             <>
                                 <span>•</span>
@@ -868,602 +950,631 @@ export default function VerticalWorkspacePage() {
                                 </Button>
                             )}
 
-                            <Dialog open={newDialogOpen} onOpenChange={setNewDialogOpen}>
-                                <DialogTrigger asChild>
-                                    <Button disabled={(vertical.sessions || []).length >= vertical.sessionRunLimit}>
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 mr-2">
-                                            <path d="M5 12h14" />
-                                            <path d="M12 5v14" />
-                                        </svg>
-                                        {(vertical.sessions || []).length >= vertical.sessionRunLimit ? "Session Limit Reached" : "New Session"}
-                                    </Button>
-                                </DialogTrigger>
-                                <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-                                    <DialogHeader>
-                                        <DialogTitle>Create Interview Session</DialogTitle>
-                                        <DialogDescription>
-                                            Record a new assessment interview for {vertical.name}.
-                                        </DialogDescription>
-                                    </DialogHeader>
-                                    <div className="space-y-4 py-4">
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="space-y-2">
-                                                <Label>Interviewee Name(s)</Label>
-                                                <Input
-                                                    placeholder="Comma-separated, e.g. Priya Sharma, Raj Kumar"
-                                                    value={newForm.intervieweeNames}
-                                                    onChange={(e) => setNewForm({ ...newForm, intervieweeNames: e.target.value })}
-                                                />
+                            {/* Hide New Session if one already exists */}
+                            {(vertical.sessions || []).length === 0 && (
+                                <Dialog open={newDialogOpen} onOpenChange={setNewDialogOpen}>
+                                    <DialogTrigger asChild>
+                                        <Button>
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 mr-2">
+                                                <path d="M5 12h14" />
+                                                <path d="M12 5v14" />
+                                            </svg>
+                                            New Session
+                                        </Button>
+                                    </DialogTrigger>
+                                    <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+                                        <DialogHeader>
+                                            <DialogTitle>Create Interview Session</DialogTitle>
+                                            <DialogDescription>
+                                                Record a new assessment interview for {vertical.name}.
+                                            </DialogDescription>
+                                        </DialogHeader>
+                                        <div className="space-y-4 py-4">
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="space-y-2">
+                                                    <Label>Interviewee Name(s)</Label>
+                                                    <Input
+                                                        placeholder="Comma-separated, e.g. Priya Sharma, Raj Kumar"
+                                                        value={newForm.intervieweeNames}
+                                                        onChange={(e) => setNewForm({ ...newForm, intervieweeNames: e.target.value })}
+                                                    />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label>Role(s)</Label>
+                                                    <Input
+                                                        placeholder="e.g. VP HR, Manager"
+                                                        value={newForm.intervieweeRoles}
+                                                        onChange={(e) => setNewForm({ ...newForm, intervieweeRoles: e.target.value })}
+                                                    />
+                                                </div>
                                             </div>
                                             <div className="space-y-2">
-                                                <Label>Role(s)</Label>
-                                                <Input
-                                                    placeholder="e.g. VP HR, Manager"
-                                                    value={newForm.intervieweeRoles}
-                                                    onChange={(e) => setNewForm({ ...newForm, intervieweeRoles: e.target.value })}
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label>Assessment Criteria Tags</Label>
-                                            <div className="flex flex-wrap gap-2">
-                                                {allCriteria.map(([key, label]) => (
-                                                    <Badge
-                                                        key={key}
-                                                        variant={newForm.selectedTags.includes(key) ? "default" : "outline"}
-                                                        className="cursor-pointer transition-colors"
-                                                        onClick={() =>
-                                                            setNewForm((prev) => ({
-                                                                ...prev,
-                                                                selectedTags: prev.selectedTags.includes(key)
-                                                                    ? prev.selectedTags.filter((t) => t !== key)
-                                                                    : [...prev.selectedTags, key],
-                                                            }))
-                                                        }
-                                                    >
-                                                        {label}
-                                                    </Badge>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        {/* File Upload */}
-                                        <div className="space-y-2">
-                                            <Label>Upload Documents (.txt, .pdf)</Label>
-                                            <div
-                                                className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-all"
-                                                onClick={() => fileInputRef.current?.click()}
-                                                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                                                onDrop={(e) => {
-                                                    e.preventDefault();
-                                                    e.stopPropagation();
-                                                    const files = Array.from(e.dataTransfer.files);
-                                                    const validFiles = files.filter((f) => {
-                                                        const ext = f.name.split(".").pop()?.toLowerCase();
-                                                        return ext === "txt" || ext === "pdf";
-                                                    });
-                                                    if (validFiles.length !== files.length) {
-                                                        toast.warning("Only .txt and .pdf files are supported");
-                                                    }
-                                                    setUploadFiles((prev) => [...prev, ...validFiles]);
-                                                }}
-                                            >
-                                                <input
-                                                    ref={fileInputRef}
-                                                    type="file"
-                                                    multiple
-                                                    accept=".txt,.pdf"
-                                                    className="hidden"
-                                                    onChange={handleFileSelect}
-                                                />
-                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-8 h-8 mx-auto mb-2 text-muted-foreground">
-                                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                                    <polyline points="17 8 12 3 7 8" />
-                                                    <line x1="12" x2="12" y1="3" y2="15" />
-                                                </svg>
-                                                <p className="text-sm text-muted-foreground">
-                                                    Click or drag files here to upload
-                                                </p>
-                                                <p className="text-xs text-muted-foreground mt-1">
-                                                    Supported: .txt, .pdf
-                                                </p>
-                                            </div>
-                                            {/* File list */}
-                                            {uploadFiles.length > 0 && (
-                                                <div className="space-y-1 mt-2">
-                                                    {uploadFiles.map((file, index) => (
-                                                        <div key={index} className="flex items-center justify-between bg-muted/50 rounded px-3 py-2 text-sm">
-                                                            <div className="flex items-center gap-2">
-                                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-muted-foreground">
-                                                                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-                                                                    <polyline points="14 2 14 8 20 8" />
-                                                                </svg>
-                                                                <span className="truncate max-w-[300px]">{file.name}</span>
-                                                                <span className="text-xs text-muted-foreground">
-                                                                    ({(file.size / 1024).toFixed(1)} KB)
-                                                                </span>
-                                                            </div>
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                className="h-6 w-6"
-                                                                onClick={(e) => { e.stopPropagation(); removeFile(index); }}
-                                                            >
-                                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3">
-                                                                    <path d="M18 6 6 18" />
-                                                                    <path d="m6 6 12 12" />
-                                                                </svg>
-                                                            </Button>
-                                                        </div>
+                                                <Label>Assessment Criteria Tags</Label>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {allCriteria.map(([key, label]) => (
+                                                        <Badge
+                                                            key={key}
+                                                            variant={newForm.selectedTags.includes(key) ? "default" : "outline"}
+                                                            className="cursor-pointer transition-colors"
+                                                            onClick={() =>
+                                                                setNewForm((prev) => ({
+                                                                    ...prev,
+                                                                    selectedTags: prev.selectedTags.includes(key)
+                                                                        ? prev.selectedTags.filter((t) => t !== key)
+                                                                        : [...prev.selectedTags, key],
+                                                                }))
+                                                            }
+                                                        >
+                                                            {label}
+                                                        </Badge>
                                                     ))}
                                                 </div>
-                                            )}
-                                        </div>
+                                            </div>
 
-                                        <div className="space-y-2">
-                                            <Label>Interview Notes</Label>
-                                            <Textarea
-                                                placeholder="Paste or type your interview notes, observations, and findings here..."
-                                                value={newForm.rawTextNotes}
-                                                onChange={(e) => setNewForm({ ...newForm, rawTextNotes: e.target.value })}
-                                                rows={12}
-                                                className="font-mono text-sm"
-                                            />
-                                            <p className="text-xs text-muted-foreground">
-                                                You can always add more context later using the + button on the session card.
-                                            </p>
+                                            {/* File Upload */}
+                                            <div className="space-y-2">
+                                                <Label>Upload Documents (.txt, .pdf)</Label>
+                                                <div
+                                                    className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-all"
+                                                    onClick={() => fileInputRef.current?.click()}
+                                                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                                                    onDrop={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        const files = Array.from(e.dataTransfer.files);
+                                                        const validFiles = files.filter((f) => {
+                                                            const ext = f.name.split(".").pop()?.toLowerCase();
+                                                            return ext === "txt" || ext === "pdf";
+                                                        });
+                                                        if (validFiles.length !== files.length) {
+                                                            toast.warning("Only .txt and .pdf files are supported");
+                                                        }
+                                                        setUploadFiles((prev) => [...prev, ...validFiles]);
+                                                    }}
+                                                >
+                                                    <input
+                                                        ref={fileInputRef}
+                                                        type="file"
+                                                        multiple
+                                                        accept=".txt,.pdf"
+                                                        className="hidden"
+                                                        onChange={handleFileSelect}
+                                                    />
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-8 h-8 mx-auto mb-2 text-muted-foreground">
+                                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                                        <polyline points="17 8 12 3 7 8" />
+                                                        <line x1="12" x2="12" y1="3" y2="15" />
+                                                    </svg>
+                                                    <p className="text-sm text-muted-foreground">
+                                                        Click or drag files here to upload
+                                                    </p>
+                                                    <p className="text-xs text-muted-foreground mt-1">
+                                                        Supported: .txt, .pdf
+                                                    </p>
+                                                </div>
+                                                {/* File list */}
+                                                {uploadFiles.length > 0 && (
+                                                    <div className="space-y-1 mt-2">
+                                                        {uploadFiles.map((file, index) => (
+                                                            <div key={index} className="flex items-center justify-between bg-muted/50 rounded px-3 py-2 text-sm">
+                                                                <div className="flex items-center gap-2">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-muted-foreground">
+                                                                        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+                                                                        <polyline points="14 2 14 8 20 8" />
+                                                                    </svg>
+                                                                    <span className="truncate max-w-[300px]">{file.name}</span>
+                                                                    <span className="text-xs text-muted-foreground">
+                                                                        ({(file.size / 1024).toFixed(1)} KB)
+                                                                    </span>
+                                                                </div>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-6 w-6"
+                                                                    onClick={(e) => { e.stopPropagation(); removeFile(index); }}
+                                                                >
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3">
+                                                                        <path d="M18 6 6 18" />
+                                                                        <path d="m6 6 12 12" />
+                                                                    </svg>
+                                                                </Button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <Label>Interview Notes</Label>
+                                                <Textarea
+                                                    placeholder="Paste or type your interview notes, observations, and findings here..."
+                                                    value={newForm.rawTextNotes}
+                                                    onChange={(e) => setNewForm({ ...newForm, rawTextNotes: e.target.value })}
+                                                    rows={12}
+                                                    className="font-mono text-sm"
+                                                />
+                                                <p className="text-xs text-muted-foreground">
+                                                    You can always add more context later using the + button on the session card.
+                                                </p>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <DialogFooter>
-                                        <Button variant="outline" onClick={() => setNewDialogOpen(false)}>
-                                            Cancel
-                                        </Button>
-                                        <Button onClick={handleCreateSession} disabled={creating}>
-                                            {creating ? "Creating..." : "Create Session"}
-                                        </Button>
-                                    </DialogFooter>
-                                </DialogContent>
-                            </Dialog>
+                                        <DialogFooter>
+                                            <Button variant="outline" onClick={() => setNewDialogOpen(false)}>
+                                                Cancel
+                                            </Button>
+                                            <Button onClick={handleCreateSession} disabled={creating}>
+                                                {creating ? "Creating..." : "Create Session"}
+                                            </Button>
+                                        </DialogFooter>
+                                    </DialogContent>
+                                </Dialog>
+                            )}
                         </div>
                     </div>
 
                     {/* Sessions list */}
-                    {vertical.sessions.length === 0 ? (
-                        <Card className="border-dashed">
-                            <CardContent className="flex flex-col items-center justify-center py-12">
-                                <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-8 h-8 text-muted-foreground">
-                                        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-                                        <polyline points="14 2 14 8 20 8" />
-                                    </svg>
-                                </div>
-                                <h3 className="text-lg font-semibold mb-1">No interview sessions</h3>
-                                <p className="text-muted-foreground text-sm mb-4">
-                                    Record your first assessment session.
-                                </p>
-                                <Button onClick={() => setNewDialogOpen(true)}>Create Session</Button>
-                            </CardContent>
-                        </Card>
-                    ) : filteredSessions.length === 0 ? (
-                        <Card className="border-dashed">
-                            <CardContent className="flex flex-col items-center justify-center py-8">
-                                <p className="text-muted-foreground text-sm">
-                                    No {sessionFilter} sessions found.
-                                </p>
-                            </CardContent>
-                        </Card>
-                    ) : (
-                        <div className="space-y-3">
-                            {filteredSessions.map((session) => (
-                                <Collapsible
-                                    key={session.id}
-                                    open={expandedSessions.has(session.id)}
-                                    onOpenChange={() => toggleExpanded(session.id)}
-                                >
-                                    <Card className="hover:border-primary/30 transition-colors">
-                                        <CardHeader className="py-4">
-                                            <div className="flex items-start justify-between">
-                                                <CollapsibleTrigger asChild>
-                                                    <div className="flex-1 cursor-pointer">
-                                                        <div className="flex items-center gap-2">
-                                                            <svg
-                                                                xmlns="http://www.w3.org/2000/svg"
-                                                                viewBox="0 0 24 24"
-                                                                fill="none"
-                                                                stroke="currentColor"
-                                                                strokeWidth="2"
-                                                                strokeLinecap="round"
-                                                                strokeLinejoin="round"
-                                                                className={`w-4 h-4 text-muted-foreground transition-transform ${expandedSessions.has(session.id) ? "rotate-90" : ""
-                                                                    }`}
-                                                            >
-                                                                <path d="m9 18 6-6-6-6" />
-                                                            </svg>
-                                                            <CardTitle className="text-base">
-                                                                Session #{session.sessionNumber}
-                                                            </CardTitle>
-                                                            <Badge
-                                                                variant={session.status === "finalized" ? "default" : "outline"}
-                                                                className="text-xs"
-                                                            >
-                                                                {session.status === "finalized" ? "✓ Finalized" : "Draft"}
-                                                            </Badge>
-                                                            {session.version > 1 && (
-                                                                <Badge variant="secondary" className="text-xs">
-                                                                    v{session.version}
+                    {
+                        (vertical.sessions || []).length === 0 ? (
+                            <Card className="border-dashed">
+                                <CardContent className="flex flex-col items-center justify-center py-12">
+                                    <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-8 h-8 text-muted-foreground">
+                                            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+                                            <polyline points="14 2 14 8 20 8" />
+                                        </svg>
+                                    </div>
+                                    <h3 className="text-lg font-semibold mb-1">No interview sessions</h3>
+                                    <p className="text-muted-foreground text-sm mb-4">
+                                        Record your first assessment session.
+                                    </p>
+                                    <Button onClick={() => setNewDialogOpen(true)}>Create Session</Button>
+                                </CardContent>
+                            </Card>
+                        ) : filteredSessions.length === 0 ? (
+                            <Card className="border-dashed">
+                                <CardContent className="flex flex-col items-center justify-center py-8">
+                                    <p className="text-muted-foreground text-sm">
+                                        No {sessionFilter} sessions found.
+                                    </p>
+                                </CardContent>
+                            </Card>
+                        ) : (
+                            <div className="space-y-3">
+                                {filteredSessions.map((session) => (
+                                    <Collapsible
+                                        key={session.id}
+                                        open={expandedSessions.has(session.id)}
+                                        onOpenChange={() => toggleExpanded(session.id)}
+                                    >
+                                        <Card className="hover:border-primary/30 transition-colors">
+                                            <CardHeader className="py-4">
+                                                <div className="flex items-start justify-between">
+                                                    <CollapsibleTrigger asChild>
+                                                        <div className="flex-1 cursor-pointer">
+                                                            <div className="flex items-center gap-2">
+                                                                <svg
+                                                                    xmlns="http://www.w3.org/2000/svg"
+                                                                    viewBox="0 0 24 24"
+                                                                    fill="none"
+                                                                    stroke="currentColor"
+                                                                    strokeWidth="2"
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                    className={`w-4 h-4 text-muted-foreground transition-transform ${expandedSessions.has(session.id) ? "rotate-90" : ""
+                                                                        }`}
+                                                                >
+                                                                    <path d="m9 18 6-6-6-6" />
+                                                                </svg>
+                                                                <CardTitle className="text-base">
+                                                                    Session #{session.sessionNumber}
+                                                                </CardTitle>
+                                                                <Badge
+                                                                    variant={session.status === "finalized" ? "default" : "outline"}
+                                                                    className="text-xs"
+                                                                >
+                                                                    {session.status === "finalized" ? "✓ Finalized" : "Draft"}
                                                                 </Badge>
-                                                            )}
+                                                                {session.version > 1 && (
+                                                                    <Badge variant="secondary" className="text-xs">
+                                                                        v{session.version}
+                                                                    </Badge>
+                                                                )}
+                                                            </div>
+                                                            <CardDescription className="mt-1 ml-6">
+                                                                {new Date(session.sessionDate).toLocaleDateString("en-US", {
+                                                                    weekday: "short",
+                                                                    year: "numeric",
+                                                                    month: "short",
+                                                                    day: "numeric",
+                                                                })}
+                                                                {session.intervieweeNames.length > 0 && (
+                                                                    <> · {session.intervieweeNames.join(", ")}</>
+                                                                )}
+                                                            </CardDescription>
                                                         </div>
-                                                        <CardDescription className="mt-1 ml-6">
-                                                            {new Date(session.sessionDate).toLocaleDateString("en-US", {
-                                                                weekday: "short",
-                                                                year: "numeric",
-                                                                month: "short",
-                                                                day: "numeric",
-                                                            })}
-                                                            {session.intervieweeNames.length > 0 && (
-                                                                <> · {session.intervieweeNames.join(", ")}</>
-                                                            )}
-                                                        </CardDescription>
-                                                    </div>
-                                                </CollapsibleTrigger>
-                                                <div className="flex items-center gap-1">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setSessionToDelete(session.id);
-                                                            setDeletingSession(false);
-                                                            setDeleteDialogOpen(true);
-                                                        }}
-                                                    >
-                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                                                            <path d="M3 6h18" />
-                                                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                                                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                                                            <line x1="10" x2="10" y1="11" y2="17" />
-                                                            <line x1="14" x2="14" y1="11" y2="17" />
-                                                        </svg>
-                                                        <span className="sr-only">Delete session</span>
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="h-8 w-8"
-                                                        title="Add more notes to this session"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setActiveSession(session);
-                                                            setAppendNotes("");
-                                                            setNotesDialogOpen(true);
-                                                        }}
-                                                    >
-                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                                                            <path d="M5 12h14" />
-                                                            <path d="M12 5v14" />
-                                                        </svg>
-                                                    </Button>
-                                                    {session.status === "draft" && (
+                                                    </CollapsibleTrigger>
+                                                    <div className="flex items-center gap-1">
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setSessionToDelete(session.id);
+                                                                setDeletingSession(false);
+                                                                setDeleteDialogOpen(true);
+                                                            }}
+                                                        >
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                                                                <path d="M3 6h18" />
+                                                                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                                                                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                                                                <line x1="10" x2="10" y1="11" y2="17" />
+                                                                <line x1="14" x2="14" y1="11" y2="17" />
+                                                            </svg>
+                                                            <span className="sr-only">Delete session</span>
+                                                        </Button>
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"
                                                             className="h-8 w-8"
-                                                            title="Finalize this session"
+                                                            title="Upload more documents"
+                                                            disabled={!!uploadingMoreFiles}
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
-                                                                handleFinalizeSession(session.id);
+                                                                setActiveSession(session);
+                                                                addFilesInputRef.current?.click();
                                                             }}
                                                         >
-                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                                                                <polyline points="20 6 9 17 4 12" />
-                                                            </svg>
+                                                            {uploadingMoreFiles === session.id ? (
+                                                                <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" opacity=".25" /><path d="M21 12a9 9 0 00-9-9" /></svg>
+                                                            ) : (
+                                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                                                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                                                    <polyline points="17 8 12 3 7 8" />
+                                                                    <line x1="12" x2="12" y1="3" y2="15" />
+                                                                </svg>
+                                                            )}
                                                         </Button>
-                                                    )}
-                                                    {session.status === "finalized" && (
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"
-                                                            className="h-8 w-8 text-amber-500"
-                                                            title="Revert to draft"
+                                                            className="h-8 w-8"
+                                                            title="Add more notes to this session"
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
-                                                                handleRevertToDraft(session.id);
+                                                                setActiveSession(session);
+                                                                setAppendNotes("");
+                                                                setNotesDialogOpen(true);
                                                             }}
                                                         >
                                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                                                                <path d="M9 14 4 9l5-5" />
-                                                                <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" />
+                                                                <path d="M5 12h14" />
+                                                                <path d="M12 5v14" />
                                                             </svg>
                                                         </Button>
-                                                    )}
-                                                    {session._count.files > 0 && (
-                                                        <span className="flex items-center gap-1 text-xs text-muted-foreground ml-1">
-                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3">
-                                                                <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-                                                            </svg>
-                                                            {session._count.files}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            {session.assessmentCriteriaTags.length > 0 && (
-                                                <div className="flex gap-1 mt-2 ml-6 flex-wrap">
-                                                    {session.assessmentCriteriaTags.map((tag) => (
-                                                        <Badge key={tag} variant="secondary" className="text-xs">
-                                                            {criteriaLabels[tag] || tag}
-                                                        </Badge>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </CardHeader>
-
-                                        <CollapsibleContent>
-                                            <CardContent className="pt-0 pb-4">
-                                                <Separator className="mb-4" />
-                                                {session.rawTextNotes ? (
-                                                    <div className="bg-muted/50 rounded-lg p-4 max-h-96 overflow-y-auto">
-                                                        <pre className="whitespace-pre-wrap text-sm font-mono leading-relaxed">
-                                                            {session.rawTextNotes}
-                                                        </pre>
+                                                        {session.status === "draft" && (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-8 w-8"
+                                                                title="Finalize this session"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleFinalizeSession(session.id);
+                                                                }}
+                                                            >
+                                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                                                                    <polyline points="20 6 9 17 4 12" />
+                                                                </svg>
+                                                            </Button>
+                                                        )}
+                                                        {session.status === "finalized" && (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-8 w-8 text-amber-500"
+                                                                title="Revert to draft"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleRevertToDraft(session.id);
+                                                                }}
+                                                            >
+                                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                                                                    <path d="M9 14 4 9l5-5" />
+                                                                    <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" />
+                                                                </svg>
+                                                            </Button>
+                                                        )}
+                                                        {session._count.files > 0 && (
+                                                            <span className="flex items-center gap-1 text-xs text-muted-foreground ml-1">
+                                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3">
+                                                                    <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                                                                </svg>
+                                                                {session._count.files}
+                                                            </span>
+                                                        )}
                                                     </div>
-                                                ) : (
-                                                    <p className="text-muted-foreground text-sm italic">
-                                                        No notes recorded yet. Click the + button to add content.
-                                                    </p>
-                                                )}
-                                                {session.aiSummary && (
-                                                    <div className="mt-4 p-4 bg-primary/5 rounded-lg border border-primary/10">
-                                                        <p className="text-xs font-medium text-primary mb-2">AI Summary</p>
-                                                        <p className="text-sm">{session.aiSummary}</p>
+                                                </div>
+                                                {session.assessmentCriteriaTags.length > 0 && (
+                                                    <div className="flex gap-1 mt-2 ml-6 flex-wrap">
+                                                        {session.assessmentCriteriaTags.map((tag) => (
+                                                            <Badge key={tag} variant="secondary" className="text-xs">
+                                                                {criteriaLabels[tag] || tag}
+                                                            </Badge>
+                                                        ))}
                                                     </div>
                                                 )}
+                                            </CardHeader>
 
-                                                {/* Files Section */}
-                                                {session.files && session.files.length > 0 && (
-                                                    <div className="mt-4">
-                                                        <p className="text-xs font-medium text-muted-foreground mb-2">Uploaded Files</p>
-                                                        <div className="space-y-2">
-                                                            {session.files.map((file) => (
-                                                                <div key={file.id} className="flex items-center justify-between bg-muted/30 rounded-lg p-3">
-                                                                    <div className="flex items-center gap-3">
-                                                                        <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center">
-                                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-primary">
-                                                                                <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-                                                                            </svg>
-                                                                        </div>
-                                                                        <div>
-                                                                            <p className="text-sm font-medium">{file.fileName}</p>
-                                                                            <p className="text-xs text-muted-foreground">
-                                                                                {(Number(file.fileSizeBytes) / 1024 / 1024).toFixed(2)} MB
-                                                                            </p>
-                                                                        </div>
-                                                                    </div>
-                                                                    <div className="flex items-center gap-2">
-                                                                        <Button
-                                                                            variant="outline"
-                                                                            size="sm"
-                                                                            disabled={downloadingFiles.has(file.id)}
-                                                                            onClick={async () => {
-                                                                                setDownloadingFiles(prev => new Set(prev).add(file.id));
-                                                                                try {
-                                                                                    const response = await fetch(`/api/sessions/${session.id}/files/${file.id}`);
-                                                                                    const data = await response.json();
-                                                                                    if (response.ok) {
-                                                                                        // Fetch the file from the signed URL
-                                                                                        const fileResponse = await fetch(data.downloadUrl);
-                                                                                        if (fileResponse.ok) {
-                                                                                            const blob = await fileResponse.blob();
-                                                                                            const url = window.URL.createObjectURL(blob);
-                                                                                            const a = document.createElement('a');
-                                                                                            a.href = url;
-                                                                                            a.download = file.fileName;
-                                                                                            document.body.appendChild(a);
-                                                                                            a.click();
-                                                                                            document.body.removeChild(a);
-                                                                                            window.URL.revokeObjectURL(url);
-                                                                                            toast.success(`Downloaded ${file.fileName}`);
-                                                                                        } else {
-                                                                                            toast.error('Failed to download file');
-                                                                                        }
-                                                                                    } else {
-                                                                                        toast.error(data.error || 'Failed to get download URL');
-                                                                                    }
-                                                                                } catch {
-                                                                                    toast.error('Failed to download file');
-                                                                                } finally {
-                                                                                    setDownloadingFiles(prev => {
-                                                                                        const newSet = new Set(prev);
-                                                                                        newSet.delete(file.id);
-                                                                                        return newSet;
-                                                                                    });
-                                                                                }
-                                                                            }}
-                                                                        >
-                                                                            {downloadingFiles.has(file.id) ? (
-                                                                                <>
-                                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 mr-1 animate-spin">
-                                                                                        <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                                                        <path d="M9 12l2 2 4-4" />
-                                                                                    </svg>
-                                                                                    Downloading...
-                                                                                </>
-                                                                            ) : (
-                                                                                <>
-                                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 mr-1">
-                                                                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                                                                        <polyline points="7 10 12 15 17 10" />
-                                                                                        <line x1="12" x2="12" y1="15" y2="3" />
-                                                                                    </svg>
-                                                                                    Download
-                                                                                </>
-                                                                            )}
-                                                                        </Button>
-                                                                        <Button
-                                                                            variant="ghost"
-                                                                            size="icon"
-                                                                            className="h-8 w-8 text-muted-foreground hover:text-destructive transition-colors"
-                                                                            title="Delete File"
-                                                                            disabled={downloadingFiles.has(file.id + "_del")}
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                handleDeleteFile(session.id, file.id, file.fileName);
-                                                                            }}
-                                                                        >
-                                                                            {downloadingFiles.has(file.id + "_del") ? (
-                                                                                <svg className="w-4 h-4 animate-spin text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /><path d="M9 12l2 2 4-4" /></svg>
-                                                                            ) : (
-                                                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
-                                                                            )}
-                                                                        </Button>
-                                                                    </div>
-                                                                </div>
-                                                            ))}
+                                            <CollapsibleContent>
+                                                <CardContent className="pt-0 pb-4">
+                                                    <Separator className="mb-4" />
+                                                    {session.rawTextNotes ? (
+                                                        <div className="bg-muted/50 rounded-lg p-4 max-h-96 overflow-y-auto">
+                                                            <pre className="whitespace-pre-wrap text-sm font-mono leading-relaxed">
+                                                                {session.rawTextNotes}
+                                                            </pre>
                                                         </div>
-                                                    </div>
-                                                )}
-                                            </CardContent>
-                                        </CollapsibleContent>
-                                    </Card>
-                                </Collapsible>
-                            ))}
+                                                    ) : (
+                                                        <p className="text-muted-foreground text-sm italic">
+                                                            No notes recorded yet. Click the + button to add content.
+                                                        </p>
+                                                    )}
+                                                    {session.aiSummary && (
+                                                        <div className="mt-4 p-4 bg-primary/5 rounded-lg border border-primary/10">
+                                                            <p className="text-xs font-medium text-primary mb-2">AI Summary</p>
+                                                            <p className="text-sm">{session.aiSummary}</p>
+                                                        </div>
+                                                    )}
 
-                        </div>
-                    )}
+                                                    {/* Files Section */}
+                                                    {session.files && session.files.length > 0 && (
+                                                        <div className="mt-4">
+                                                            <p className="text-xs font-medium text-muted-foreground mb-2">Uploaded Files</p>
+                                                            <div className="space-y-2">
+                                                                {session.files.map((file) => (
+                                                                    <div key={file.id} className="flex items-center justify-between bg-muted/30 rounded-lg p-3">
+                                                                        <div className="flex items-center gap-3">
+                                                                            <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center">
+                                                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-primary">
+                                                                                    <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                                                                                </svg>
+                                                                            </div>
+                                                                            <div>
+                                                                                <p className="text-sm font-medium">{file.fileName}</p>
+                                                                                <p className="text-xs text-muted-foreground">
+                                                                                    {(Number(file.fileSizeBytes) / 1024 / 1024).toFixed(2)} MB
+                                                                                </p>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <Button
+                                                                                variant="outline"
+                                                                                size="sm"
+                                                                                disabled={downloadingFiles.has(file.id)}
+                                                                                onClick={async () => {
+                                                                                    setDownloadingFiles(prev => new Set(prev).add(file.id));
+                                                                                    try {
+                                                                                        const response = await fetch(`/api/sessions/${session.id}/files/${file.id}`);
+                                                                                        const data = await response.json();
+                                                                                        if (response.ok) {
+                                                                                            // Fetch the file from the signed URL
+                                                                                            const fileResponse = await fetch(data.downloadUrl);
+                                                                                            if (fileResponse.ok) {
+                                                                                                const blob = await fileResponse.blob();
+                                                                                                const url = window.URL.createObjectURL(blob);
+                                                                                                const a = document.createElement('a');
+                                                                                                a.href = url;
+                                                                                                a.download = file.fileName;
+                                                                                                document.body.appendChild(a);
+                                                                                                a.click();
+                                                                                                document.body.removeChild(a);
+                                                                                                window.URL.revokeObjectURL(url);
+                                                                                                toast.success(`Downloaded ${file.fileName}`);
+                                                                                            } else {
+                                                                                                toast.error('Failed to download file');
+                                                                                            }
+                                                                                        } else {
+                                                                                            toast.error(data.error || 'Failed to get download URL');
+                                                                                        }
+                                                                                    } catch {
+                                                                                        toast.error('Failed to download file');
+                                                                                    } finally {
+                                                                                        setDownloadingFiles(prev => {
+                                                                                            const newSet = new Set(prev);
+                                                                                            newSet.delete(file.id);
+                                                                                            return newSet;
+                                                                                        });
+                                                                                    }
+                                                                                }}
+                                                                            >
+                                                                                {downloadingFiles.has(file.id) ? (
+                                                                                    <>
+                                                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 mr-1 animate-spin">
+                                                                                            <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                                                            <path d="M9 12l2 2 4-4" />
+                                                                                        </svg>
+                                                                                        Downloading...
+                                                                                    </>
+                                                                                ) : (
+                                                                                    <>
+                                                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 mr-1">
+                                                                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                                                                            <polyline points="7 10 12 15 17 10" />
+                                                                                            <line x1="12" x2="12" y1="15" y2="3" />
+                                                                                        </svg>
+                                                                                        Download
+                                                                                    </>
+                                                                                )}
+                                                                            </Button>
+                                                                            <Button
+                                                                                variant="ghost"
+                                                                                size="icon"
+                                                                                className="h-8 w-8 text-muted-foreground hover:text-destructive transition-colors"
+                                                                                title="Delete File"
+                                                                                disabled={downloadingFiles.has(file.id + "_del")}
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    handleDeleteFile(session.id, file.id, file.fileName);
+                                                                                }}
+                                                                            >
+                                                                                {downloadingFiles.has(file.id + "_del") ? (
+                                                                                    <svg className="w-4 h-4 animate-spin text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /><path d="M9 12l2 2 4-4" /></svg>
+                                                                                ) : (
+                                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
+                                                                                )}
+                                                                            </Button>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </CardContent>
+                                            </CollapsibleContent>
+                                        </Card>
+                                    </Collapsible>
+                                ))}
+
+                            </div>
+                        )
+                    }
                 </TabsContent>
 
                 {/* ────────────── Data Matrix & Schema Tab ────────────── */}
                 <TabsContent value="matrix" className="space-y-8 min-w-0">
-                    {matrixLoading ? (
-                        <div className="space-y-3">
-                            <Skeleton className="h-10 w-full" />
-                            <Skeleton className="h-10 w-full" />
-                            <Skeleton className="h-10 w-full" />
-                        </div>
-                    ) : (
-                        <>
+                    {
+                        matrixLoading ? (
+                            <div className="space-y-3" >
+                                <Skeleton className="h-10 w-full" />
+                                <Skeleton className="h-10 w-full" />
+                                <Skeleton className="h-10 w-full" />
+                            </div>
+                        ) : (
+                            <>
 
 
-                            {/* ────────────── Data Mapping & Inventory Rows ────────────── */}
-                            {matrixRows.length > 0 ? (
-                                <Collapsible
-                                    open={matrixOpen}
-                                    onOpenChange={setMatrixOpen}
-                                    className="bg-card text-card-foreground shadow-sm rounded-xl border border-border mt-4"
-                                >
-                                    <div className="flex flex-col space-y-1.5 p-6 pb-4">
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex items-center gap-3">
-                                                <CollapsibleTrigger asChild>
-                                                    <Button variant="ghost" size="sm" className="w-9 p-0 hover:bg-muted/50 rounded-md transition-transform duration-200">
-                                                        {matrixOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                                                        <span className="sr-only">Toggle</span>
+                                {/* ────────────── Data Mapping & Inventory Rows ────────────── */}
+                                {matrixRows.length > 0 ? (
+                                    <Collapsible
+                                        open={matrixOpen}
+                                        onOpenChange={setMatrixOpen}
+                                        className="bg-card text-card-foreground shadow-sm rounded-xl border border-border mt-4"
+                                    >
+                                        <div className="flex flex-col space-y-1.5 p-6 pb-4">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <CollapsibleTrigger asChild>
+                                                        <Button variant="ghost" size="sm" className="w-9 p-0 hover:bg-muted/50 rounded-md transition-transform duration-200">
+                                                            {matrixOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                                            <span className="sr-only">Toggle</span>
+                                                        </Button>
+                                                    </CollapsibleTrigger>
+                                                    <div>
+                                                        <h3 className="text-xl font-semibold leading-none tracking-tight">1. Data Mapping & Inventory Rows</h3>
+                                                        <p className="text-sm text-muted-foreground mt-1.5">{matrixRows.length} data categories identified</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <Button
+                                                        onClick={handleGenerateMatrix}
+                                                        disabled={generatingPipeline}
+                                                        size="sm"
+                                                    >
+                                                        {generatingPipeline ? "Generating..." : "Generate Matrix & Schema"}
                                                     </Button>
-                                                </CollapsibleTrigger>
-                                                <div>
-                                                    <h3 className="text-xl font-semibold leading-none tracking-tight">1. Data Mapping & Inventory Rows</h3>
-                                                    <p className="text-sm text-muted-foreground mt-1.5">{matrixRows.length} data categories identified</p>
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-2">
-                                                <Button
-                                                    onClick={handleGenerateMatrix}
-                                                    disabled={generatingPipeline}
-                                                    size="sm"
-                                                >
-                                                    {generatingPipeline ? "Generating..." : "Generate Matrix & Schema"}
-                                                </Button>
-                                            </div>
                                         </div>
-                                    </div>
-                                    <CollapsibleContent>
-                                        <div className="p-6 pt-0 w-full overflow-hidden">
-                                            <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4 pb-4">
-                                                {matrixRows.map((row, idx) => (
-                                                    <Card key={row.id} className="flex flex-col overflow-hidden transition-all hover:shadow-md border-border/50">
-                                                        <div className="bg-muted/30 px-5 py-3 border-b flex items-start justify-between gap-4">
-                                                            <div className="flex items-center gap-2.5">
-                                                                <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-semibold shrink-0">
-                                                                    {row.sNo}
+                                        <CollapsibleContent>
+                                            <div className="p-6 pt-0 w-full overflow-hidden">
+                                                <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4 pb-4">
+                                                    {matrixRows.map((row, idx) => (
+                                                        <Card key={row.id} className="flex flex-col overflow-hidden transition-all hover:shadow-md border-border/50">
+                                                            <div className="bg-muted/30 px-5 py-3 border-b flex items-start justify-between gap-4">
+                                                                <div className="flex items-center gap-2.5">
+                                                                    <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-semibold shrink-0">
+                                                                        {row.sNo}
+                                                                    </div>
+                                                                    <h4 className="font-semibold text-base line-clamp-1" title={row.dataCategory}>
+                                                                        {row.dataCategory}
+                                                                    </h4>
                                                                 </div>
-                                                                <h4 className="font-semibold text-base line-clamp-1" title={row.dataCategory}>
-                                                                    {row.dataCategory}
-                                                                </h4>
+                                                                <Badge variant={
+                                                                    row.dataClassification.toLowerCase().includes("pii") || row.dataClassification.toLowerCase().includes("sensitive")
+                                                                        ? "destructive"
+                                                                        : row.dataClassification.toLowerCase().includes("confidential")
+                                                                            ? "default"
+                                                                            : "secondary"
+                                                                } className="shrink-0">
+                                                                    {row.dataClassification}
+                                                                </Badge>
                                                             </div>
-                                                            <Badge variant={
-                                                                row.dataClassification.toLowerCase().includes("pii") || row.dataClassification.toLowerCase().includes("sensitive")
-                                                                    ? "destructive"
-                                                                    : row.dataClassification.toLowerCase().includes("confidential")
-                                                                        ? "default"
-                                                                        : "secondary"
-                                                            } className="shrink-0">
-                                                                {row.dataClassification}
-                                                            </Badge>
-                                                        </div>
-                                                        <CardContent className="p-5 flex-1 flex flex-col gap-4">
-                                                            <div className="space-y-1.5">
-                                                                <span className="text-xs font-semibold uppercase text-muted-foreground">Description</span>
-                                                                <p className="text-sm text-foreground/90 leading-relaxed">
-                                                                    {row.description}
-                                                                </p>
-                                                            </div>
+                                                            <CardContent className="p-5 flex-1 flex flex-col gap-4">
+                                                                <div className="space-y-1.5">
+                                                                    <span className="text-xs font-semibold uppercase text-muted-foreground">Description</span>
+                                                                    <p className="text-sm text-foreground/90 leading-relaxed">
+                                                                        {row.description}
+                                                                    </p>
+                                                                </div>
 
-                                                            <div className="space-y-1.5">
-                                                                <span className="text-xs font-semibold uppercase text-muted-foreground">Purpose</span>
-                                                                <p className="text-sm text-muted-foreground leading-relaxed">
-                                                                    {row.purpose}
-                                                                </p>
-                                                            </div>
+                                                                <div className="space-y-1.5">
+                                                                    <span className="text-xs font-semibold uppercase text-muted-foreground">Purpose</span>
+                                                                    <p className="text-sm text-muted-foreground leading-relaxed">
+                                                                        {row.purpose}
+                                                                    </p>
+                                                                </div>
 
-                                                            <div className="mt-auto pt-4 flex flex-wrap gap-2">
-                                                                <div className="flex items-center gap-1.5 bg-secondary/50 px-2.5 py-1 rounded-md text-xs text-secondary-foreground" title="Data Owner">
-                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 opacity-70"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-                                                                    <span className="truncate max-w-[120px]">{row.dataOwner}</span>
+                                                                <div className="mt-auto pt-4 flex flex-wrap gap-2">
+                                                                    <div className="flex items-center gap-1.5 bg-secondary/50 px-2.5 py-1 rounded-md text-xs text-secondary-foreground" title="Data Owner">
+                                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 opacity-70"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+                                                                        <span className="truncate max-w-[120px]">{row.dataOwner}</span>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-1.5 bg-secondary/50 px-2.5 py-1 rounded-md text-xs text-secondary-foreground" title="Storage Location">
+                                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 opacity-70"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" /><line x1="7" y1="7" x2="7.01" y2="7" /></svg>
+                                                                        <span className="truncate max-w-[120px]">{row.storageLocation}</span>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-1.5 bg-secondary/50 px-2.5 py-1 rounded-md text-xs text-secondary-foreground" title="Retention Period">
+                                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 opacity-70"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+                                                                        <span>{row.retentionPeriod}</span>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-1.5 bg-secondary/50 px-2.5 py-1 rounded-md text-xs text-secondary-foreground" title="Legal Basis">
+                                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 opacity-70"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
+                                                                        <span className="truncate max-w-[140px]">{row.legalBasis}</span>
+                                                                    </div>
                                                                 </div>
-                                                                <div className="flex items-center gap-1.5 bg-secondary/50 px-2.5 py-1 rounded-md text-xs text-secondary-foreground" title="Storage Location">
-                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 opacity-70"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" /><line x1="7" y1="7" x2="7.01" y2="7" /></svg>
-                                                                    <span className="truncate max-w-[120px]">{row.storageLocation}</span>
-                                                                </div>
-                                                                <div className="flex items-center gap-1.5 bg-secondary/50 px-2.5 py-1 rounded-md text-xs text-secondary-foreground" title="Retention Period">
-                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 opacity-70"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
-                                                                    <span>{row.retentionPeriod}</span>
-                                                                </div>
-                                                                <div className="flex items-center gap-1.5 bg-secondary/50 px-2.5 py-1 rounded-md text-xs text-secondary-foreground" title="Legal Basis">
-                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 opacity-70"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
-                                                                    <span className="truncate max-w-[140px]">{row.legalBasis}</span>
-                                                                </div>
-                                                            </div>
-                                                        </CardContent>
-                                                    </Card>
-                                                ))}
+                                                            </CardContent>
+                                                        </Card>
+                                                    ))}
+                                                </div>
                                             </div>
-                                        </div>
-                                    </CollapsibleContent>
-                                </Collapsible>
-                            ) : (
-                                <Card className="border-dashed">
-                                    <CardContent className="flex flex-col items-center justify-center py-12">
-                                        <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-8 h-8 text-muted-foreground">
-                                                <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
-                                                <line x1="3" x2="21" y1="9" y2="9" />
-                                                <line x1="3" x2="21" y1="15" y2="15" />
-                                                <line x1="9" x2="9" y1="3" y2="21" />
-                                                <line x1="15" x2="15" y1="3" y2="21" />
-                                            </svg>
-                                        </div>
-                                        <h3 className="text-lg font-semibold mb-1">No Data Matrix Yet</h3>
-                                        <p className="text-muted-foreground text-sm mb-4 text-center max-w-sm">
-                                            {hasFinalizedSessions
-                                                ? "Click \"Generate Data Matrix\" in the Sessions tab to create the data mapping."
-                                                : "Finalize at least one session, then generate the Data Matrix from the Sessions tab."}
-                                        </p>
-                                    </CardContent>
-                                </Card>
-                            )}
-                        </>
-                    )}
+                                        </CollapsibleContent>
+                                    </Collapsible>
+                                ) : (
+                                    <Card className="border-dashed">
+                                        <CardContent className="flex flex-col items-center justify-center py-12">
+                                            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-8 h-8 text-muted-foreground">
+                                                    <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+                                                    <line x1="3" x2="21" y1="9" y2="9" />
+                                                    <line x1="3" x2="21" y1="15" y2="15" />
+                                                    <line x1="9" x2="9" y1="3" y2="21" />
+                                                    <line x1="15" x2="15" y1="3" y2="21" />
+                                                </svg>
+                                            </div>
+                                            <h3 className="text-lg font-semibold mb-1">No Data Matrix Yet</h3>
+                                            <p className="text-muted-foreground text-sm mb-4 text-center max-w-sm">
+                                                {hasFinalizedSessions
+                                                    ? "Click \"Generate Data Matrix\" in the Sessions tab to create the data mapping."
+                                                    : "Finalize at least one session, then generate the Data Matrix from the Sessions tab."}
+                                            </p>
+                                        </CardContent>
+                                    </Card>
+                                )}
+                            </>
+                        )
+                    }
 
                     {/* ────────────── Schema Content ────────────── */}
                     <Collapsible
@@ -1802,6 +1913,18 @@ export default function VerticalWorkspacePage() {
                 </TabsContent>
 
                 <TabsContent value="dfd" className="space-y-4 min-w-0 overflow-x-auto">
+                    {(dfdHtml || dfdData) && (
+                        <div className="flex items-center justify-end gap-2 mb-2">
+                            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExportPng}>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></svg>
+                                Export PNG
+                            </Button>
+                            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExportPdf}>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /><path d="M14 2v4a2 2 0 0 0 2 2h4" /></svg>
+                                Export PDF
+                            </Button>
+                        </div>
+                    )}
                     {dfdLoading || pipelineStatus === "pending" || pipelineStatus === "processing" ? (
                         <div className="space-y-3">
                             <Skeleton className="h-64 w-full" />
@@ -1815,6 +1938,7 @@ export default function VerticalWorkspacePage() {
                     ) : dfdHtml ? (
                         <div className="w-full relative min-h-[800px] h-[90vh] min-w-0 rounded-lg border overflow-hidden">
                             <iframe
+                                ref={iframeRef}
                                 srcDoc={dfdHtml}
                                 className="w-full h-full border-none"
                                 title="Data Flow Diagram"
@@ -1823,7 +1947,7 @@ export default function VerticalWorkspacePage() {
                         </div>
                     ) : dfdData ? (
                         <div className="w-full relative min-h-[500px] min-w-0 overflow-x-auto">
-                            <DfdHtmlRenderer dfd={dfdData} />
+                            <DfdHtmlRenderer ref={dfdRendererRef} dfd={dfdData} />
                         </div>
                     ) : (
                         <Card className="flex flex-col items-center justify-center p-12 bg-slate-50 border-dashed border-2">
@@ -1891,151 +2015,151 @@ export default function VerticalWorkspacePage() {
                         const editorLevels = renderPlan?.levels || (dfdData as any)?.dfd_render_plan?.levels || [];
 
                         return (
-                        <div className="bg-card text-card-foreground rounded-lg border border-border shadow-sm overflow-hidden">
-                            {/* Sub-tab header */}
-                            <div className="flex items-center justify-between border-b border-border px-4 py-2 bg-muted/30">
-                                <div className="flex items-center gap-1">
-                                    <button
-                                        onClick={() => setEditorSubTab("editor")}
-                                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${editorSubTab === "editor"
-                                            ? "bg-primary text-primary-foreground"
-                                            : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                                            }`}
-                                    >
-                                        Editor
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            setEditorSubTab("preview");
-                                            // Auto-trigger preview when switching to preview tab
-                                            const nodes = editedNodes.length > 0 ? editedNodes : editorNodes;
-                                            const edges = editedEdges.length > 0 ? editedEdges : editorEdges;
-                                            const levels = editedLevels.length > 0 ? editedLevels : editorLevels;
-                                            setPreviewing(true);
-                                            fetch("/api/dfd/preview", {
-                                                method: "POST",
-                                                headers: { "Content-Type": "application/json" },
-                                                body: JSON.stringify({ nodes, edges, levels, pipeline_docs: {} }),
-                                            }).then(res => res.ok ? res.json() : null)
-                                                .then(data => { if (data?.html) setPreviewHtml(data.html); })
-                                                .catch(err => console.error("Preview error:", err))
-                                                .finally(() => setPreviewing(false));
-                                        }}
-                                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-1.5 ${editorSubTab === "preview"
-                                            ? "bg-primary text-primary-foreground"
-                                            : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                                            }`}
-                                    >
-                                        Preview
-                                        {previewing && (
-                                            <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                        )}
-                                    </button>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    {editorSubTab === "preview" && (
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-7 w-7"
-                                            onClick={() => setPreviewFullscreen(!previewFullscreen)}
-                                            title={previewFullscreen ? "Exit fullscreen" : "Expand preview"}
+                            <div className="bg-card text-card-foreground rounded-lg border border-border shadow-sm overflow-hidden">
+                                {/* Sub-tab header */}
+                                <div className="flex items-center justify-between border-b border-border px-4 py-2 bg-muted/30">
+                                    <div className="flex items-center gap-1">
+                                        <button
+                                            onClick={() => setEditorSubTab("editor")}
+                                            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${editorSubTab === "editor"
+                                                ? "bg-primary text-primary-foreground"
+                                                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                                                }`}
                                         >
-                                            {previewFullscreen ? (
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3" /><path d="M21 8h-3a2 2 0 0 1-2-2V3" /><path d="M3 16h3a2 2 0 0 1 2 2v3" /><path d="M16 21v-3a2 2 0 0 1 2-2h3" /></svg>
-                                            ) : (
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2" /><path d="M17 3h2a2 2 0 0 1 2 2v2" /><path d="M21 17v2a2 2 0 0 1-2 2h-2" /><path d="M7 21H5a2 2 0 0 1-2-2v-2" /></svg>
+                                            Editor
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setEditorSubTab("preview");
+                                                // Auto-trigger preview when switching to preview tab
+                                                const nodes = editedNodes.length > 0 ? editedNodes : editorNodes;
+                                                const edges = editedEdges.length > 0 ? editedEdges : editorEdges;
+                                                const levels = editedLevels.length > 0 ? editedLevels : editorLevels;
+                                                setPreviewing(true);
+                                                fetch("/api/dfd/preview", {
+                                                    method: "POST",
+                                                    headers: { "Content-Type": "application/json" },
+                                                    body: JSON.stringify({ nodes, edges, levels, pipeline_docs: {} }),
+                                                }).then(res => res.ok ? res.json() : null)
+                                                    .then(data => { if (data?.html) setPreviewHtml(data.html); })
+                                                    .catch(err => console.error("Preview error:", err))
+                                                    .finally(() => setPreviewing(false));
+                                            }}
+                                            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-1.5 ${editorSubTab === "preview"
+                                                ? "bg-primary text-primary-foreground"
+                                                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                                                }`}
+                                        >
+                                            Preview
+                                            {previewing && (
+                                                <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                             )}
-                                        </Button>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Editor sub-tab content — always mounted, hidden when preview is active */}
-                            <div className={`p-4 ${editorSubTab !== "editor" ? "hidden" : ""}`}>
-                                <ListBasedDfdEditor
-                                    initialNodes={editorNodes}
-                                    initialEdges={editorEdges}
-                                    initialLevels={editorLevels}
-                                    previewing={previewing}
-                                    saving={savingDfd}
-                                    onChanged={(nodes, edges, levels) => {
-                                        setEditedNodes(nodes);
-                                        setEditedEdges(edges);
-                                        setEditedLevels(levels);
-                                    }}
-                                    onSave={async (nodes, edges, levels) => {
-                                        setSavingDfd(true);
-                                        const toastId = toast.loading("Saving DFD & regenerating...");
-                                        try {
-                                            const res = await fetch("/api/dfd/update_session", {
-                                                method: "POST",
-                                                headers: { "Content-Type": "application/json" },
-                                                body: JSON.stringify({
-                                                    session_id: verticalId,
-                                                    nodes,
-                                                    edges,
-                                                    levels,
-                                                    pipeline_docs: {},
-                                                }),
-                                            });
-                                            if (res.ok) {
-                                                toast.success("DFD saved & regenerated!", { id: toastId });
-                                                fetchPipelineResults();
-                                            } else {
-                                                const err = await res.json();
-                                                toast.error(err.error || "Failed to save DFD", { id: toastId });
-                                            }
-                                        } catch (e) {
-                                            console.error("Save error:", e);
-                                            toast.error("Error connecting to server", { id: toastId });
-                                        } finally {
-                                            setSavingDfd(false);
-                                        }
-                                    }}
-                                />
-                            </div>
-
-                            {/* Preview sub-tab content */}
-                            {editorSubTab === "preview" && (
-                                <div className={previewFullscreen
-                                    ? "fixed inset-0 z-50 flex flex-col bg-background"
-                                    : ""
-                                }>
-                                    {previewFullscreen && (
-                                        <div className="px-4 py-3 border-b border-border flex justify-between items-center bg-muted/30 shrink-0">
-                                            <h3 className="text-sm font-medium">DFD Preview</h3>
-                                            <div className="flex items-center gap-2">
-                                                {previewing && (
-                                                    <span className="text-xs text-blue-500 flex items-center gap-1 animate-pulse">
-                                                        <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                                        Updating...
-                                                    </span>
-                                                )}
-                                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setPreviewFullscreen(false)} title="Exit fullscreen">
+                                        </button>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        {editorSubTab === "preview" && (
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-7 w-7"
+                                                onClick={() => setPreviewFullscreen(!previewFullscreen)}
+                                                title={previewFullscreen ? "Exit fullscreen" : "Expand preview"}
+                                            >
+                                                {previewFullscreen ? (
                                                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3" /><path d="M21 8h-3a2 2 0 0 1-2-2V3" /><path d="M3 16h3a2 2 0 0 1 2 2v3" /><path d="M16 21v-3a2 2 0 0 1 2-2h3" /></svg>
-                                                </Button>
+                                                ) : (
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2" /><path d="M17 3h2a2 2 0 0 1 2 2v2" /><path d="M21 17v2a2 2 0 0 1-2 2h-2" /><path d="M7 21H5a2 2 0 0 1-2-2v-2" /></svg>
+                                                )}
+                                            </Button>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Editor sub-tab content — always mounted, hidden when preview is active */}
+                                <div className={`p-4 ${editorSubTab !== "editor" ? "hidden" : ""}`}>
+                                    <ListBasedDfdEditor
+                                        initialNodes={editorNodes}
+                                        initialEdges={editorEdges}
+                                        initialLevels={editorLevels}
+                                        previewing={previewing}
+                                        saving={savingDfd}
+                                        onChanged={(nodes, edges, levels) => {
+                                            setEditedNodes(nodes);
+                                            setEditedEdges(edges);
+                                            setEditedLevels(levels);
+                                        }}
+                                        onSave={async (nodes, edges, levels) => {
+                                            setSavingDfd(true);
+                                            const toastId = toast.loading("Saving DFD & regenerating...");
+                                            try {
+                                                const res = await fetch("/api/dfd/update_session", {
+                                                    method: "POST",
+                                                    headers: { "Content-Type": "application/json" },
+                                                    body: JSON.stringify({
+                                                        session_id: verticalId,
+                                                        nodes,
+                                                        edges,
+                                                        levels,
+                                                        pipeline_docs: {},
+                                                    }),
+                                                });
+                                                if (res.ok) {
+                                                    toast.success("DFD saved & regenerated!", { id: toastId });
+                                                    fetchPipelineResults();
+                                                } else {
+                                                    const err = await res.json();
+                                                    toast.error(err.error || "Failed to save DFD", { id: toastId });
+                                                }
+                                            } catch (e) {
+                                                console.error("Save error:", e);
+                                                toast.error("Error connecting to server", { id: toastId });
+                                            } finally {
+                                                setSavingDfd(false);
+                                            }
+                                        }}
+                                    />
+                                </div>
+
+                                {/* Preview sub-tab content */}
+                                {editorSubTab === "preview" && (
+                                    <div className={previewFullscreen
+                                        ? "fixed inset-0 z-50 flex flex-col bg-background"
+                                        : ""
+                                    }>
+                                        {previewFullscreen && (
+                                            <div className="px-4 py-3 border-b border-border flex justify-between items-center bg-muted/30 shrink-0">
+                                                <h3 className="text-sm font-medium">DFD Preview</h3>
+                                                <div className="flex items-center gap-2">
+                                                    {previewing && (
+                                                        <span className="text-xs text-blue-500 flex items-center gap-1 animate-pulse">
+                                                            <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                                            Updating...
+                                                        </span>
+                                                    )}
+                                                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setPreviewFullscreen(false)} title="Exit fullscreen">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3" /><path d="M21 8h-3a2 2 0 0 1-2-2V3" /><path d="M3 16h3a2 2 0 0 1 2 2v3" /><path d="M16 21v-3a2 2 0 0 1 2-2h3" /></svg>
+                                                    </Button>
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
-                                    <div className={`min-h-[600px] ${previewFullscreen ? "flex-1" : ""}`}>
-                                        {previewing && !previewHtml && !dfdHtml ? (
-                                            <div className="flex flex-col items-center justify-center h-full p-12">
-                                                <svg className="w-8 h-8 animate-spin text-muted-foreground/50 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                                <p className="text-sm text-muted-foreground">Generating preview...</p>
-                                            </div>
-                                        ) : (previewHtml || dfdHtml) ? (
-                                            <iframe
-                                                srcDoc={previewHtml || dfdHtml || ""}
-                                                className={`w-full border-none ${previewFullscreen ? "h-full" : "min-h-[600px] h-[70vh]"}`}
-                                                title="DFD Preview"
-                                                sandbox="allow-scripts allow-same-origin"
-                                            />
-                                        ) : (
-                                            <div className="flex flex-col items-center justify-center h-full p-12 text-center">
-                                                <Activity className="w-10 h-10 text-muted-foreground/30 mb-3" />
-                                                <p className="text-sm text-muted-foreground">No preview available yet.</p>
-                                                <p className="text-xs text-muted-foreground/60 mt-1">Make edits in the Editor tab, then switch here to see the updated diagram.</p>
+                                        )}
+                                        <div className={`min-h-[600px] ${previewFullscreen ? "flex-1" : ""}`}>
+                                            {previewing && !previewHtml && !dfdHtml ? (
+                                                <div className="flex flex-col items-center justify-center h-full p-12">
+                                                    <svg className="w-8 h-8 animate-spin text-muted-foreground/50 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                                    <p className="text-sm text-muted-foreground">Generating preview...</p>
+                                                </div>
+                                            ) : (previewHtml || dfdHtml) ? (
+                                                <iframe
+                                                    srcDoc={previewHtml || dfdHtml || ""}
+                                                    className={`w-full border-none ${previewFullscreen ? "h-full" : "min-h-[600px] h-[70vh]"}`}
+                                                    title="DFD Preview"
+                                                    sandbox="allow-scripts allow-same-origin"
+                                                />
+                                            ) : (
+                                                <div className="flex flex-col items-center justify-center h-full p-12 text-center">
+                                                    <Activity className="w-10 h-10 text-muted-foreground/30 mb-3" />
+                                                    <p className="text-sm text-muted-foreground">No preview available yet.</p>
+                                                    <p className="text-xs text-muted-foreground/60 mt-1">Make edits in the Editor tab, then switch here to see the updated diagram.</p>
                                                 </div>
                                             )}
                                         </div>
@@ -2045,7 +2169,7 @@ export default function VerticalWorkspacePage() {
                         );
                     })()}
                 </TabsContent>
-            </Tabs>
+            </Tabs >
 
             {/* Add Notes Dialog */}
             < Dialog open={notesDialogOpen} onOpenChange={setNotesDialogOpen} >
@@ -2118,6 +2242,15 @@ export default function VerticalWorkspacePage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog >
+
+            <input
+                type="file"
+                multiple
+                accept=".txt,.pdf"
+                className="hidden"
+                ref={addFilesInputRef}
+                onChange={handleAddMoreFiles}
+            />
         </div >
     );
 }

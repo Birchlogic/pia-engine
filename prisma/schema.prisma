@@ -193,6 +193,7 @@ enum AssessmentType {
   dpia
   ai_governance
   custom
+  dfd
 }
 
 enum ProjectStatus {
