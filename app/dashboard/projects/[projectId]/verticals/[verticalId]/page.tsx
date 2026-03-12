@@ -914,7 +914,7 @@ export default function VerticalWorkspacePage() {
                                 <div className="w-10 h-10 rounded-full border-2 border-primary border-t-transparent animate-spin flex-shrink-0" />
                                 <div>
                                     <p className="text-sm font-medium">Generating Data Matrix...</p>
-                                    <p className="text-xs text-muted-foreground">AI is analyzing your session transcripts. This may take 30-60 seconds.</p>
+                                    <p className="text-xs text-muted-foreground">AI is analyzing your session transcripts. This may take 4-5 mins.</p>
                                 </div>
                             </CardContent>
                         </Card>
@@ -1942,7 +1942,7 @@ export default function VerticalWorkspacePage() {
                                 srcDoc={dfdHtml}
                                 className="w-full h-full border-none"
                                 title="Data Flow Diagram"
-                                sandbox="allow-scripts allow-same-origin"
+                                sandbox="allow-scripts allow-same-origin allow-modals allow-downloads allow-popups"
                             />
                         </div>
                     ) : dfdData ? (
