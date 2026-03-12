@@ -449,6 +449,7 @@ export default function EditableDfd({ data, onSave }: EditableDfdProps) {
     const [hasChanges, setHasChanges] = useState(false);
     const [originalData] = useState<DfdInput>(data);
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+    const [showAllLinkings, setShowAllLinkings] = useState(false);
 
     const { pushState, undo, redo, canUndo, canRedo } = useUndoRedo();
 
@@ -560,6 +561,18 @@ export default function EditableDfd({ data, onSave }: EditableDfdProps) {
 
     // ── Highlight connected edges & nodes when a node is clicked ──
     useEffect(() => {
+        if (showAllLinkings) {
+            setNodes((nds) => nds.map((n) => n.type === "dfdNode"
+                ? { ...n, data: { ...n.data, isHighlighted: true } }
+                : n
+            ));
+            setEdges((eds) => eds.map((e) => ({
+                ...e,
+                data: { ...e.data, isActive: false, isDimmed: false },
+            })));
+            return;
+        }
+
         if (!selectedNodeId) {
             setNodes((nds) => nds.map((n) => n.type === "dfdNode"
                 ? { ...n, data: { ...n.data, isHighlighted: true } }
@@ -585,12 +598,13 @@ export default function EditableDfd({ data, onSave }: EditableDfdProps) {
             ? { ...n, data: { ...n.data, isHighlighted: connectedNodeIds.has(n.id) } }
             : n
         ));
-    }, [selectedNodeId, setNodes, setEdges]);
+    }, [selectedNodeId, showAllLinkings, setNodes, setEdges]);
 
     const onNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
         if (node.type === "categoryBox") return;
+        if (showAllLinkings) return;
         setSelectedNodeId((prev) => prev === node.id ? null : node.id);
-    }, []);
+    }, [showAllLinkings]);
 
     const onPaneClick = useCallback(() => setSelectedNodeId(null), []);
 
@@ -806,6 +820,29 @@ export default function EditableDfd({ data, onSave }: EditableDfdProps) {
                         <div style={{ fontWeight: 700, fontSize: 11, marginBottom: 6, color: "#1e293b" }}>
                             Interaction Guide
                         </div>
+                        <label style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            marginBottom: 8,
+                            padding: "6px 8px",
+                            borderRadius: 8,
+                            border: "1px solid #e2e8f0",
+                            background: showAllLinkings ? "#eff6ff" : "#f8fafc",
+                            cursor: "pointer",
+                        }}>
+                            <input
+                                type="checkbox"
+                                checked={showAllLinkings}
+                                onChange={(e) => {
+                                    setShowAllLinkings(e.target.checked);
+                                    setSelectedNodeId(null);
+                                }}
+                            />
+                            <span style={{ fontSize: 10, fontWeight: 700, color: "#1e293b" }}>
+                                Show all linkings
+                            </span>
+                        </label>
                         <div style={{ display: "flex", flexDirection: "column", gap: 4, color: "#64748b", fontSize: 9 }}>
                             <span>🖱️ Click node → highlight flows</span>
                             <span>✏️ Double-click → edit name</span>
