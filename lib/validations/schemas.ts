@@ -37,10 +37,10 @@ export const addUserSchema = z.object({
 export const createProjectSchema = z.object({
     orgId: z.string().min(1, "Valid organization ID is required"),
     name: z.string().min(1, "Project name is required").max(200),
-    description: z.string().optional(),
+    description: z.string().optional().nullable(),
     applicableRegulations: z.array(z.string()).optional().default([]),
-    assessmentType: z.enum(["full_pia", "dpia", "ai_governance", "custom"]).optional().default("full_pia"),
-    targetCompletionDate: z.string().datetime().optional().nullable(),
+    assessmentType: z.enum(["full_pia", "dpia", "ai_governance", "custom", "dfd"]).optional().default("dfd"),
+    targetCompletionDate: z.string().optional().nullable(),
 });
 
 // ─── Verticals ───
@@ -79,9 +79,9 @@ export const addProjectMemberSchema = z.object({
 export function validateBody<T>(schema: z.ZodSchema<T>, body: unknown): { data: T } | { error: string } {
     const result = schema.safeParse(body);
     if (!result.success) {
-        const firstError = result.error?.errors?.[0];
+        const firstError = result.error.issues[0];
         if (firstError) {
-            const pathInfo = Array.isArray(firstError.path) ? firstError.path.join(".") : "";
+            const pathInfo = firstError.path.join(".");
             const errMsg = `${pathInfo ? pathInfo + ": " : ""}${firstError.message}`;
             console.error("[Zod Validation Error]:", errMsg, body);
             return { error: errMsg };

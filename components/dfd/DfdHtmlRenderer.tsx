@@ -714,99 +714,151 @@ function drawFlowLabel(ctx: CanvasRenderingContext2D, label: string, x: number, 
 
 /* ─────────────────── React Component ─────────────────── */
 
-export function DfdHtmlRenderer({ dfd }: { dfd: DfdData | null }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+export interface DfdHtmlRendererRef {
+  exportPng: () => void;
+  exportPdf: () => void;
+}
 
-  const render = useCallback(() => {
-    if (!canvasRef.current || !dfd) return;
-    renderDfd(canvasRef.current, dfd);
-  }, [dfd]);
+export const DfdHtmlRenderer = React.forwardRef<DfdHtmlRendererRef, { dfd: DfdData | null }>(
+  ({ dfd }, ref) => {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const t1 = setTimeout(render, 100);
-    const t2 = setTimeout(render, 500);
-    const onResize = () => render();
-    window.addEventListener("resize", onResize);
-    return () => { clearTimeout(t1); clearTimeout(t2); window.removeEventListener("resize", onResize); };
-  }, [render]);
+    const exportPng = useCallback(() => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const url = canvas.toDataURL("image/png");
+      const link = document.createElement("a");
+      link.download = `dfd-${dfd?.department || "export"}.png`;
+      link.href = url;
+      link.click();
+    }, [dfd]);
 
-  if (!dfd) {
+    const exportPdf = useCallback(() => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      // For PDF without jspdf, we can open a new window with the image and call print
+      const url = canvas.toDataURL("image/png");
+      const printWindow = window.open("", "_blank");
+      if (printWindow) {
+        printWindow.document.write(`
+                <html>
+                    <head>
+                        <title>Data Flow Diagram - ${dfd?.department || "Export"}</title>
+                        <style>
+                            body { margin: 0; display: flex; justify-content: center; align-items: center; background: #0f172a; }
+                            img { max-width: 100%; height: auto; }
+                            @media print {
+                                body { background: white; }
+                                img { max-width: 100%; }
+                            }
+                        </style>
+                    </head>
+                    <body>
+                        <img src="${url}" onload="window.print(); window.close();" />
+                    </body>
+                </html>
+            `);
+        printWindow.document.close();
+      }
+    }, [dfd]);
+
+    React.useImperativeHandle(ref, () => ({
+      exportPng,
+      exportPdf
+    }));
+
+    const render = useCallback(() => {
+      if (!canvasRef.current || !dfd) return;
+      renderDfd(canvasRef.current, dfd);
+    }, [dfd]);
+
+    useEffect(() => {
+      const t1 = setTimeout(render, 100);
+      const t2 = setTimeout(render, 500);
+      const onResize = () => render();
+      window.addEventListener("resize", onResize);
+      return () => { clearTimeout(t1); clearTimeout(t2); window.removeEventListener("resize", onResize); };
+    }, [render]);
+
+    if (!dfd) {
+      return (
+        <Card className="border-dashed">
+          <CardContent className="flex items-center justify-center py-16 text-muted-foreground text-sm">
+            No DFD data available
+          </CardContent>
+        </Card>
+      );
+    }
+
+    const citations = dfd.citations || [];
+    const version = dfd.version || "1.0";
+
     return (
-      <Card className="border-dashed">
-        <CardContent className="flex items-center justify-center py-16 text-muted-foreground text-sm">
-          No DFD data available
-        </CardContent>
-      </Card>
+      <div className="space-y-0">
+        {/* Toolbar above canvas */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-bold text-foreground">Data Flow Diagram</h3>
+            <Badge variant="outline" className="text-[10px] font-mono">v{version}</Badge>
+          </div>
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-1.5 text-xs">
+                📋 Sources
+                <Badge className="ml-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-[10px]">
+                  {citations.length}
+                </Badge>
+              </Button>
+            </SheetTrigger>
+            <SheetContent className="w-[420px] sm:w-[480px] overflow-y-auto">
+              <SheetHeader>
+                <SheetTitle>Source Citations</SheetTitle>
+                <SheetDescription>
+                  Evidence and references backing each DFD element.
+                </SheetDescription>
+              </SheetHeader>
+              <div className="mt-6 space-y-3">
+                {citations.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    No citations available.
+                  </p>
+                ) : (
+                  citations.map((cite, i) => (
+                    <Card key={i} className="border-border/50">
+                      <CardContent className="p-3 flex gap-3">
+                        <Badge className="h-6 w-6 rounded-full p-0 flex items-center justify-center shrink-0 text-[10px]">
+                          {i + 1}
+                        </Badge>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-xs">{cite.element_name}</p>
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">
+                            {cite.source_section}
+                          </p>
+                          <blockquote className="text-[11px] text-muted-foreground italic border-l-2 border-primary/40 pl-2.5 py-1 bg-muted/30 rounded-r leading-relaxed">
+                            &ldquo;{cite.source_text}&rdquo;
+                          </blockquote>
+                          <Badge variant="secondary" className="mt-2 text-[9px]">
+                            {cite.source_type === "docx_table" ? "📄 Document" : "🔍 Inferred"}
+                          </Badge>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
+            </SheetContent>
+          </Sheet>
+        </div>
+
+        {/* Canvas container */}
+        <Card className="overflow-hidden border-border/60">
+          <div ref={containerRef} className="overflow-x-auto bg-[#0f172a] rounded-lg">
+            <canvas ref={canvasRef} className="block" />
+          </div>
+        </Card>
+      </div>
     );
   }
-
-  const citations = dfd.citations || [];
-  const version = dfd.version || "1.0";
-
-  return (
-    <div className="space-y-0">
-      {/* Toolbar above canvas */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-bold text-foreground">Data Flow Diagram</h3>
-          <Badge variant="outline" className="text-[10px] font-mono">v{version}</Badge>
-        </div>
-        <Sheet>
-          <SheetTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-1.5 text-xs">
-              📋 Sources
-              <Badge className="ml-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-[10px]">
-                {citations.length}
-              </Badge>
-            </Button>
-          </SheetTrigger>
-          <SheetContent className="w-[420px] sm:w-[480px] overflow-y-auto">
-            <SheetHeader>
-              <SheetTitle>Source Citations</SheetTitle>
-              <SheetDescription>
-                Evidence and references backing each DFD element.
-              </SheetDescription>
-            </SheetHeader>
-            <div className="mt-6 space-y-3">
-              {citations.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">
-                  No citations available.
-                </p>
-              ) : (
-                citations.map((cite, i) => (
-                  <Card key={i} className="border-border/50">
-                    <CardContent className="p-3 flex gap-3">
-                      <Badge className="h-6 w-6 rounded-full p-0 flex items-center justify-center shrink-0 text-[10px]">
-                        {i + 1}
-                      </Badge>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-xs">{cite.element_name}</p>
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">
-                          {cite.source_section}
-                        </p>
-                        <blockquote className="text-[11px] text-muted-foreground italic border-l-2 border-primary/40 pl-2.5 py-1 bg-muted/30 rounded-r leading-relaxed">
-                          &ldquo;{cite.source_text}&rdquo;
-                        </blockquote>
-                        <Badge variant="secondary" className="mt-2 text-[9px]">
-                          {cite.source_type === "docx_table" ? "📄 Document" : "🔍 Inferred"}
-                        </Badge>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))
-              )}
-            </div>
-          </SheetContent>
-        </Sheet>
-      </div>
-
-      {/* Canvas container */}
-      <Card className="overflow-hidden border-border/60">
-        <div ref={containerRef} className="overflow-x-auto bg-[#0f172a] rounded-lg">
-          <canvas ref={canvasRef} className="block" />
-        </div>
-      </Card>
-    </div>
-  );
-}
+);

@@ -30,7 +30,7 @@ export async function POST(request: Request) {
         // Verify vertical → project → org chain matches user's org
         await requireVerticalOrgAccess(user, verticalId);
 
-        // Check session limit
+        /* // Check session limit
         const vertical = await prisma.vertical.findUnique({
             where: { id: verticalId },
             select: { sessionRunLimit: true, _count: { select: { sessions: true } } }
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
         if (!vertical) return errorResponse("Vertical not found", 404);
         if (vertical._count.sessions >= vertical.sessionRunLimit) {
             return forbiddenResponse(`Session run limit reached (${vertical.sessionRunLimit} sessions max) for this vertical. Please upgrade or contact support.`);
-        }
+        } */
 
         // Get next session number
         const maxSession = await prisma.interviewSession.aggregate({

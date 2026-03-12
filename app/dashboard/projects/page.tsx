@@ -79,7 +79,7 @@ export default function ProjectsDashboardPage() {
     const [form, setForm] = useState({
         name: "",
         description: "",
-        assessmentType: "full_pia",
+        assessmentType: "dfd",
         targetCompletionDate: "",
     });
     const [deleteProjectId, setDeleteProjectId] = useState<string | null>(null);
@@ -138,7 +138,7 @@ export default function ProjectsDashboardPage() {
         if (res.ok) {
             toast.success("Project created");
             setDialogOpen(false);
-            setForm({ name: "", description: "", assessmentType: "full_pia", targetCompletionDate: "" });
+            setForm({ name: "", description: "", assessmentType: "dfd", targetCompletionDate: "" });
             fetchData();
         } else {
             toast.error("Failed to create project");
@@ -221,7 +221,7 @@ export default function ProjectsDashboardPage() {
                             </>
                         )}
                     </div>
-                    {org.regulatoryScope.length > 0 && (
+                    {/* {org.regulatoryScope.length > 0 && (
                         <div className="flex gap-1 mt-2">
                             {org.regulatoryScope.map((reg) => (
                                 <Badge key={reg} variant="secondary" className="text-xs">
@@ -229,7 +229,7 @@ export default function ProjectsDashboardPage() {
                                 </Badge>
                             ))}
                         </div>
-                    )}
+                    )} */}
                 </div>
 
                 {user?.role === "admin" && (
@@ -279,15 +279,16 @@ export default function ProjectsDashboardPage() {
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="full_pia">Full PIA</SelectItem>
-                                                <SelectItem value="dpia">DPIA</SelectItem>
-                                                <SelectItem value="ai_governance">AI Governance</SelectItem>
-                                                <SelectItem value="custom">Custom</SelectItem>
+                                                <SelectItem value="dfd">DFD</SelectItem>
+                                                <SelectItem value="full_pia" disabled>Full PIA</SelectItem>
+                                                <SelectItem value="dpia" disabled>DPIA</SelectItem>
+                                                <SelectItem value="ai_governance" disabled>AI Governance</SelectItem>
+                                                <SelectItem value="custom" disabled>Custom</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </div>
                                     <div className="space-y-2">
-                                        <Label htmlFor="proj-date">Target Date</Label>
+                                        <Label htmlFor="proj-date">Creation Date</Label>
                                         <Input
                                             id="proj-date"
                                             type="date"
@@ -354,7 +355,7 @@ export default function ProjectsDashboardPage() {
                                                 >
                                                     {project.status.replace("_", " ")}
                                                 </Badge>
-                                                {user?.role === "admin" && (
+                                                {/* {user?.role === "admin" && (
                                                     <Button
                                                         variant="ghost"
                                                         size="icon"
@@ -368,7 +369,7 @@ export default function ProjectsDashboardPage() {
                                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
                                                         )}
                                                     </Button>
-                                                )}
+                                                )} */}
                                             </div>
                                         </div>
                                         {project.description && (
@@ -395,7 +396,7 @@ export default function ProjectsDashboardPage() {
                 )}
             </div>
             {/* Delete Project Confirmation Dialog */}
-            <AlertDialog open={!!deleteProjectId} onOpenChange={(open) => !open && setDeleteProjectId(null)}>
+            {/* <AlertDialog open={!!deleteProjectId} onOpenChange={(open) => !open && setDeleteProjectId(null)}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
                         <AlertDialogTitle>Delete Project</AlertDialogTitle>
@@ -414,7 +415,7 @@ export default function ProjectsDashboardPage() {
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
-            </AlertDialog>
+            </AlertDialog> */}
         </div>
     );
 }
