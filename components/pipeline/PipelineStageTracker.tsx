@@ -7,21 +7,12 @@ import {
     Loader2, 
     ChevronDown, 
     ChevronUp,
-    Info,
-    Layout
 } from "lucide-react";
 import { 
     Collapsible, 
     CollapsibleContent, 
     CollapsibleTrigger 
 } from "@/components/ui/collapsible";
-import { 
-    Sheet, 
-    SheetContent, 
-    SheetDescription, 
-    SheetHeader, 
-    SheetTitle 
-} from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
@@ -58,6 +49,10 @@ export function PipelineStageTracker({ data }: PipelineStageTrackerProps) {
     const stageList = stages || [];
     const isCompleted = status === "completed";
     const isFailed = status === "failed";
+    const isDone = isCompleted || progress_percent >= 100;
+    const progressIndicatorClassName = isDone
+        ? "bg-green-600 dark:bg-green-500"
+        : "bg-yellow-500 dark:bg-yellow-400";
 
     return (
         <div className="w-full space-y-4">
@@ -87,7 +82,11 @@ export function PipelineStageTracker({ data }: PipelineStageTrackerProps) {
                     </div>
                 </div>
                 
-                <Progress value={progress_percent} className="h-2 mb-2" />
+                <Progress
+                    value={progress_percent}
+                    className="h-2 mb-2"
+                    indicatorClassName={progressIndicatorClassName}
+                />
 
                 <Collapsible open={isOpen} onOpenChange={setIsOpen} className="mt-4">
                     <CollapsibleTrigger asChild>
@@ -98,7 +97,7 @@ export function PipelineStageTracker({ data }: PipelineStageTrackerProps) {
                     </CollapsibleTrigger>
                     
                     <CollapsibleContent className="pt-2">
-                        <div className="relative pl-6 space-y-2 before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-muted">
+                        <div className="relative pl-6 space-y-2 before:absolute before:left-[1px] before:top-2 before:bottom-2 before:w-[2px] before:bg-muted before:z-0">
                             {stageList.map((stage, idx) => {
                                 const isStageCompleted = idx < stageList.length - 1 || isCompleted;
                                 const isCurrent = stage.stage === current_stage && !isCompleted;
@@ -106,10 +105,10 @@ export function PipelineStageTracker({ data }: PipelineStageTrackerProps) {
                                 return (
                                     <div 
                                         key={`${stage.stage}-${idx}`}
-                                        className="relative group pr-2"
+                                        className="relative group pr-2 z-10"
                                     >
                                         <div className={cn(
-                                            "absolute -left-[31px] top-1.5 w-4 h-4 rounded-full border-2 bg-card flex items-center justify-center z-10 transition-colors",
+                                            "absolute -left-[31px] top-1.5 w-4 h-4 rounded-full border-2 bg-card flex items-center justify-center z-10 transition-colors shadow-sm",
                                             isStageCompleted ? "border-green-500 bg-green-50 dark:bg-green-900/10" : 
                                             isCurrent ? "border-blue-500 bg-blue-50 dark:bg-blue-900/10" : "border-border bg-card"
                                         )}>
@@ -138,9 +137,9 @@ export function PipelineStageTracker({ data }: PipelineStageTrackerProps) {
                                                         </div>
                                                     )}
                                                 </div>
-                                                <p className="text-[10px] text-muted-foreground/50 font-mono">
+                                                {/* <p className="text-[10px] text-muted-foreground/50 font-mono">
                                                     {stage.duration_ms > 0 ? `${(stage.duration_ms / 1000).toFixed(2)}s` : "Pending..."}
-                                                </p>
+                                                </p> */}
                                             </div>
                                         </div>
                                     </div>
