@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DfdHtmlRenderer, type DfdData, type DfdHtmlRendererRef } from "@/components/dfd/DfdHtmlRenderer";
 import { type KnowledgeGraph, type PrivacyDfd, type RenderPlan } from "@/components/dfd/EditableDfd";
+import html2canvas from "html2canvas";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Activity, ChevronDown, ChevronUp } from "lucide-react";
@@ -828,6 +829,36 @@ export default function VerticalWorkspacePage() {
         }
     };
 
+    // Fallback: capture the whole DFD Viewer tab with html2canvas
+    const handleExportPngFallback = async () => {
+        const container = document.querySelector('[data-tab-content="dfd"]') as HTMLElement;
+        if (!container) {
+            toast.error("DFD Viewer tab not found");
+            return;
+        }
+        try {
+            const canvas = await html2canvas(container, { backgroundColor: "#ffffff", scale: 2 });
+            canvas.toBlob((blob) => {
+                if (!blob) {
+                    toast.error("Failed to export PNG");
+                    return;
+                }
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `dfd-${vertical?.name || verticalId}-tab.png`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                toast.success("Exported DFD Viewer tab as PNG");
+            }, "image/png");
+        } catch (e) {
+            console.error("html2canvas error:", e);
+            toast.error("Failed to capture tab for PNG export");
+        }
+    };
+
     const handleExportPdf = () => {
         if (dfdRendererRef.current) {
             dfdRendererRef.current.exportPdf();
@@ -913,6 +944,61 @@ export default function VerticalWorkspacePage() {
             }
         } else {
             toast.error("No DFD available to export");
+        }
+    };
+
+    // Fallback: capture the whole DFD Viewer tab and print it via hidden iframe
+    const handleExportPdfFallback = async () => {
+        const container = document.querySelector('[data-tab-content="dfd"]') as HTMLElement;
+        if (!container) {
+            toast.error("DFD Viewer tab not found");
+            return;
+        }
+        try {
+            const canvas = await html2canvas(container, { backgroundColor: "#ffffff", scale: 2 });
+            const imgData = canvas.toDataURL("image/png");
+            const title = `Data Flow Diagram - ${vertical?.name || verticalId}`;
+            const printFrame = document.createElement("iframe");
+            printFrame.style.position = "fixed";
+            printFrame.style.right = "0";
+            printFrame.style.bottom = "0";
+            printFrame.style.width = "0";
+            printFrame.style.height = "0";
+            printFrame.style.border = "0";
+            printFrame.srcdoc = `
+              <html>
+                <head>
+                  <title>${title}</title>
+                  <style>
+                    body { margin: 0; padding: 12mm; background: white; }
+                    img { max-width: 100%; height: auto; }
+                    @page { margin: 12mm; }
+                  </style>
+                </head>
+                <body>
+                  <img src="${imgData}" />
+                  <script>
+                    window.onload = function () {
+                      setTimeout(function () {
+                        window.focus();
+                        window.print();
+                      }, 50);
+                    };
+                  </script>
+                </body>
+              </html>
+            `;
+            document.body.appendChild(printFrame);
+            const cleanup = () => {
+                if (printFrame.parentNode) printFrame.parentNode.removeChild(printFrame);
+            };
+            const w = printFrame.contentWindow;
+            if (w) w.onafterprint = () => cleanup();
+            setTimeout(cleanup, 10_000);
+            toast.success("Exported DFD Viewer tab as PDF");
+        } catch (e) {
+            console.error("html2canvas PDF error:", e);
+            toast.error("Failed to capture tab for PDF export");
         }
     };
 
@@ -2083,14 +2169,14 @@ export default function VerticalWorkspacePage() {
                     </Collapsible>
                 </TabsContent>
 
-                <TabsContent value="dfd" className="space-y-4 min-w-0 overflow-x-auto">
+                <TabsContent value="dfd" className="space-y-4 min-w-0 overflow-x-auto" data-tab-content="dfd">
                     {(dfdHtml || dfdData) && (
                         <div className="flex items-center justify-end gap-2 mb-2">
-                            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExportPng}>
+                            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExportPngFallback}>
                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></svg>
                                 Export PNG
                             </Button>
-                            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExportPdf}>
+                            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExportPdfFallback}>
                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /><path d="M14 2v4a2 2 0 0 0 2 2h4" /></svg>
                                 Export PDF
                             </Button>
