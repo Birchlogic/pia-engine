@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { DfdHtmlRenderer, type DfdData, type DfdHtmlRendererRef } from "@/components/dfd/DfdHtmlRenderer";
+import { DfdHtmlRenderer, type DfdData } from "@/components/dfd/DfdHtmlRenderer";
 import { type KnowledgeGraph, type PrivacyDfd, type RenderPlan } from "@/components/dfd/EditableDfd";
 import html2canvas from "html2canvas";
 import { Textarea } from "@/components/ui/textarea";
@@ -210,7 +210,6 @@ export default function VerticalWorkspacePage() {
     const addFilesInputRef = useRef<HTMLInputElement>(null);
 
     // Refs for export
-    const dfdRendererRef = useRef<DfdHtmlRendererRef>(null);
     const iframeRef = useRef<HTMLIFrameElement>(null);
 
     // 3-JSON DFD structures from pipeline
@@ -716,9 +715,7 @@ export default function VerticalWorkspacePage() {
     };
 
     const handleExportPng = () => {
-        if (dfdRendererRef.current) {
-            dfdRendererRef.current.exportPng();
-        } else if (iframeRef.current) {
+        if (iframeRef.current) {
             try {
                 const doc = iframeRef.current.contentDocument;
                 if (!doc) {
@@ -860,9 +857,7 @@ export default function VerticalWorkspacePage() {
     };
 
     const handleExportPdf = () => {
-        if (dfdRendererRef.current) {
-            dfdRendererRef.current.exportPdf();
-        } else if (iframeRef.current) {
+        if (iframeRef.current) {
             try {
                 const doc = iframeRef.current.contentDocument;
                 if (!doc) {
@@ -2172,14 +2167,6 @@ export default function VerticalWorkspacePage() {
                 <TabsContent value="dfd" className="space-y-4 min-w-0 overflow-x-auto" data-tab-content="dfd">
                     {(dfdHtml || dfdData) && (
                         <div className="flex items-center justify-end gap-2 mb-2">
-                            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExportPngFallback}>
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></svg>
-                                Export PNG
-                            </Button>
-                            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExportPdfFallback}>
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /><path d="M14 2v4a2 2 0 0 0 2 2h4" /></svg>
-                                Export PDF
-                            </Button>
                         </div>
                     )}
                     {dfdLoading || pipelineStatus === "pending" || pipelineStatus === "processing" ? (
@@ -2204,7 +2191,7 @@ export default function VerticalWorkspacePage() {
                         </div>
                     ) : dfdData ? (
                         <div className="w-full relative min-h-[500px] min-w-0 overflow-x-auto">
-                            <DfdHtmlRenderer ref={dfdRendererRef} dfd={dfdData} />
+                            <DfdHtmlRenderer dfd={dfdData} />
                         </div>
                     ) : (
                         <Card className="flex flex-col items-center justify-center p-12 bg-slate-50 border-dashed border-2">

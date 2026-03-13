@@ -714,104 +714,10 @@ function drawFlowLabel(ctx: CanvasRenderingContext2D, label: string, x: number, 
 
 /* ─────────────────── React Component ─────────────────── */
 
-export interface DfdHtmlRendererRef {
-  exportPng: () => void;
-  exportPdf: () => void;
-}
-
-export const DfdHtmlRenderer = React.forwardRef<DfdHtmlRendererRef, { dfd: DfdData | null }>(
+export const DfdHtmlRenderer = React.forwardRef<{}, { dfd: DfdData | null }>(
   ({ dfd }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
-
-    const exportPng = useCallback(() => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-
-      const fileName = `dfd-${dfd?.department || "export"}.png`;
-
-      if (canvas.toBlob) {
-        canvas.toBlob((blob) => {
-          if (!blob) return;
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement("a");
-          link.download = fileName;
-          link.href = url;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-        }, "image/png");
-        return;
-      }
-
-      // Fallback
-      const url = canvas.toDataURL("image/png");
-      const link = document.createElement("a");
-      link.download = fileName;
-      link.href = url;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }, [dfd]);
-
-    const exportPdf = useCallback(() => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-
-      // Avoid popup blockers by printing via an offscreen iframe.
-      const url = canvas.toDataURL("image/png");
-      const iframe = document.createElement("iframe");
-      iframe.style.position = "fixed";
-      iframe.style.right = "0";
-      iframe.style.bottom = "0";
-      iframe.style.width = "0";
-      iframe.style.height = "0";
-      iframe.style.border = "0";
-
-      const title = `Data Flow Diagram - ${dfd?.department || "Export"}`;
-      iframe.srcdoc = `
-        <html>
-          <head>
-            <title>${title}</title>
-            <style>
-              body { margin: 0; display: flex; justify-content: center; align-items: center; background: white; }
-              img { width: 100%; height: auto; }
-              @page { margin: 12mm; }
-            </style>
-          </head>
-          <body>
-            <img src="${url}" />
-            <script>
-              window.onload = function () {
-                setTimeout(function () {
-                  window.focus();
-                  window.print();
-                }, 50);
-              };
-            </script>
-          </body>
-        </html>
-      `;
-
-      document.body.appendChild(iframe);
-
-      const cleanup = () => {
-        if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
-      };
-
-      // Cleanup after print (best-effort)
-      const w = iframe.contentWindow;
-      if (w) {
-        w.onafterprint = () => cleanup();
-      }
-      setTimeout(cleanup, 10_000);
-    }, [dfd]);
-
-    React.useImperativeHandle(ref, () => ({
-      exportPng,
-      exportPdf
-    }));
 
     const render = useCallback(() => {
       if (!canvasRef.current || !dfd) return;
