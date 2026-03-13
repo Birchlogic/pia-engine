@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser, unauthorizedResponse } from "@/lib/auth/helpers";
 
-const PIPELINE_API = process.env.DFD_API_BASE_URL || "http://34.207.212.163:8000";
+const PIPELINE_API = process.env.DFD_API_BASE_URL || "http://35.170.54.12:8000";
 
 export async function GET(
     request: Request,
@@ -13,7 +13,7 @@ export async function GET(
     const { verticalId } = await params;
 
     try {
-        const res = await fetch(`${PIPELINE_API}/api/status/${verticalId}`);
+        const res = await fetch(`${PIPELINE_API}/api/stages/${verticalId}`);
 
         if (!res.ok) {
             if (res.status === 404) {

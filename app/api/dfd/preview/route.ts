@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/helpers";
 import { unauthorizedResponse, serverErrorResponse } from "@/lib/auth/responses";
 
-const PIPELINE_API = process.env.DFD_API_BASE_URL || "http://34.207.212.163:8000";
+const PIPELINE_API = process.env.DFD_API_BASE_URL || "http://35.170.54.12:8000";
 
 /**
  * POST /api/dfd/preview

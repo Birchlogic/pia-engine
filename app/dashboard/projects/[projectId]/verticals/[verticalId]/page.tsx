@@ -27,11 +27,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DfdHtmlRenderer, type DfdData } from "@/components/dfd/DfdHtmlRenderer";
 import { type KnowledgeGraph, type PrivacyDfd, type RenderPlan } from "@/components/dfd/EditableDfd";
-import html2canvas from "html2canvas";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Activity, ChevronDown, ChevronUp } from "lucide-react";
 import ListBasedDfdEditor from "@/components/dfd/ListBasedDfdEditor";
+import { PipelineStageTracker, type PipelineStatusResponse } from "@/components/pipeline/PipelineStageTracker";
 
 
 type SessionFile = {
@@ -226,7 +226,7 @@ export default function VerticalWorkspacePage() {
     const [deletingSession, setDeletingSession] = useState(false);
 
     // Unified Pipeline Status
-    const [pipelineStatus, setPipelineStatus] = useState<string>("not_started");
+    const [pipelineStatus, setPipelineStatus] = useState<PipelineStatusResponse | null>(null);
     const [generatingPipeline, setGeneratingPipeline] = useState(false);
 
     // Source of Truth (Schema-1)
@@ -362,11 +362,9 @@ export default function VerticalWorkspacePage() {
                     }
                 }
 
-                // Schema-1
                 if (data.schema_one_json) {
                     setSchemaOne(data.schema_one_json);
                 }
-                setPipelineStatus("completed");
             }
             // 404 means results not ready — that's fine
         } catch (err) {
@@ -377,10 +375,29 @@ export default function VerticalWorkspacePage() {
         setSchemaLoading(false); // Set schema loading to false here, regardless of success or failure
     }, [verticalId]);
 
+    const fetchPipelineStatus = useCallback(async () => {
+        try {
+            const res = await fetch(`/api/verticals/${verticalId}/pipeline/status`);
+            if (res.ok) {
+                const data = await res.json();
+                const status = data.status || "not_started";
+                setPipelineStatus(data);
+
+                if (status === "completed" && data.progress_percent === 100) {
+                    fetchPipelineResults();
+                } else if (status === "processing" || status === "pending") {
+                    setGeneratingPipeline(true);
+                }
+            }
+        } catch (err) {
+            console.error("Error fetching stage status:", err);
+        }
+    }, [verticalId, fetchPipelineResults]);
+
     useEffect(() => {
         fetchVertical();
-        fetchPipelineResults();
-    }, [fetchVertical, fetchPipelineResults]);
+        fetchPipelineStatus();
+    }, [fetchVertical, fetchPipelineStatus]);
 
     // Unified pipeline polling
     useEffect(() => {
@@ -394,11 +411,9 @@ export default function VerticalWorkspacePage() {
                     const data = await res.json();
                     const status = data.status || "not_started";
 
-                    if (status !== pipelineStatus) {
-                        setPipelineStatus(status);
-                    }
+                    setPipelineStatus(data);
 
-                    if (status === "completed") {
+                    if (status === "completed" && data.progress_percent === 100) {
                         toast.success("Pipeline completed! Fetching results...");
                         setGeneratingPipeline(false);
                         fetchPipelineResults();
@@ -668,8 +683,7 @@ export default function VerticalWorkspacePage() {
             return;
         }
 
-        setGeneratingPipeline(true);
-        setPipelineStatus("processing");
+        setPipelineStatus({ status: "processing", progress_percent: 0, current_stage: "starting", stages: [], session_id: verticalId } as any);
         const toastId = toast.loading("Preparing to generate new Data Matrix...", { id: "matrix-gen" });
         try {
             // First clear out the previous matrices
@@ -691,6 +705,7 @@ export default function VerticalWorkspacePage() {
             const data = await res.json();
             if (res.ok) {
                 toast.success("Processing started! We're continuously monitoring the status and will update you automatically.", { id: toastId, duration: 5000 });
+                setGeneratingPipeline(true);
                 startCooldown();
             } else {
                 let errorMsg = "Failed to start pipeline";
@@ -705,12 +720,12 @@ export default function VerticalWorkspacePage() {
                 }
                 toast.error(errorMsg, { id: toastId });
                 setGeneratingPipeline(false);
-                setPipelineStatus("not_started");
+                setPipelineStatus(null);
             }
         } catch {
             toast.error("Network error — failed to start pipeline", { id: toastId });
             setGeneratingPipeline(false);
-            setPipelineStatus("not_started");
+            setPipelineStatus(null);
         }
     };
 
@@ -1159,17 +1174,11 @@ export default function VerticalWorkspacePage() {
                         </Card>
                     )}
 
-                    {/* Generation Loading Overlay */}
-                    {generatingPipeline && (
-                        <Card className="border-primary/30 bg-primary/5">
-                            <CardContent className="py-4 px-4 flex items-center gap-4">
-                                <div className="w-10 h-10 rounded-full border-2 border-primary border-t-transparent animate-spin flex-shrink-0" />
-                                <div>
-                                    <p className="text-sm font-medium">Generating Data Matrix...</p>
-                                    <p className="text-xs text-muted-foreground">AI is analyzing your session transcripts. This may take 4-5 mins.</p>
-                                </div>
-                            </CardContent>
-                        </Card>
+                    {/* Pipeline Status Tracking (Persistent) */}
+                    {pipelineStatus && pipelineStatus.status !== "not_started" && (
+                        <div className="mb-6">
+                            <PipelineStageTracker data={pipelineStatus} />
+                        </div>
                     )}
 
                     {/* Filter Sub-tabs + Actions */}
@@ -1696,14 +1705,13 @@ export default function VerticalWorkspacePage() {
 
                 {/* ────────────── Data Matrix & Schema Tab ────────────── */}
                 <TabsContent value="matrix" className="space-y-8 min-w-0">
-                    {
-                        matrixLoading ? (
-                            <div className="space-y-3" >
-                                <Skeleton className="h-10 w-full" />
-                                <Skeleton className="h-10 w-full" />
-                                <Skeleton className="h-10 w-full" />
-                            </div>
-                        ) : (
+                    {matrixLoading ? (
+                        <div className="space-y-3">
+                            <Skeleton className="h-10 w-full" />
+                            <Skeleton className="h-10 w-full" />
+                            <Skeleton className="h-10 w-full" />
+                        </div>
+                    ) : (
                             <>
 
 
@@ -1848,8 +1856,10 @@ export default function VerticalWorkspacePage() {
                         <CollapsibleContent>
                             <div className="p-6">
                                 {schemaLoading ? (
-                                    <div className="flex items-center justify-center py-12">
-                                        <p className="text-muted-foreground">Loading Schema-1 data...</p>
+                                    <div className="space-y-3">
+                                        <Skeleton className="h-12 w-full" />
+                                        <Skeleton className="h-12 w-full" />
+                                        <Skeleton className="h-12 w-full" />
                                     </div>
                                 ) : !schemaOne || !schemaOne.nodes || schemaOne.nodes.length === 0 ? (
                                     <Card>
@@ -2169,15 +2179,9 @@ export default function VerticalWorkspacePage() {
                         <div className="flex items-center justify-end gap-2 mb-2">
                         </div>
                     )}
-                    {dfdLoading || pipelineStatus === "pending" || pipelineStatus === "processing" ? (
+                    {dfdLoading ? (
                         <div className="space-y-3">
                             <Skeleton className="h-64 w-full" />
-                            {pipelineStatus && pipelineStatus !== "not_started" && pipelineStatus !== "completed" && (
-                                <p className="text-sm text-muted-foreground text-center flex items-center justify-center gap-2">
-                                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /><path d="M9 12l2 2 4-4" /></svg>
-                                    Pipeline is processing...
-                                </p>
-                            )}
                         </div>
                     ) : dfdHtml ? (
                         <div className="w-full relative min-h-[800px] h-[90vh] min-w-0 rounded-lg border overflow-hidden">
