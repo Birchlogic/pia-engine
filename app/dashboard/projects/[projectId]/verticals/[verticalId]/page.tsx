@@ -280,6 +280,9 @@ export default function VerticalWorkspacePage() {
             const res = await fetch(`/api/verticals/${verticalId}/pipeline/results`);
             if (res.ok) {
                 const data = await res.json();
+                if (data?.status === "not_ready") {
+                    return;
+                }
                 // Data mapping rows
                 if (data.data_mapping_rows && Array.isArray(data.data_mapping_rows)) {
                     // Filter duplicates based on data category (case insensitive)
@@ -728,7 +731,23 @@ export default function VerticalWorkspacePage() {
                 const fileName = `dfd-${vertical?.name || verticalId}.png`;
 
                 if (canvasEl) {
-                    canvasEl.toBlob((blob) => {
+                    const w = Math.max(1, canvasEl.width || canvasEl.clientWidth || 1);
+                    const h = Math.max(1, canvasEl.height || canvasEl.clientHeight || 1);
+
+                    const outCanvas = document.createElement("canvas");
+                    outCanvas.width = w;
+                    outCanvas.height = h;
+                    const ctx = outCanvas.getContext("2d");
+                    if (!ctx) {
+                        toast.error("Failed to export PNG");
+                        return;
+                    }
+
+                    ctx.fillStyle = "#ffffff";
+                    ctx.fillRect(0, 0, w, h);
+                    ctx.drawImage(canvasEl, 0, 0);
+
+                    outCanvas.toBlob((blob) => {
                         if (!blob) {
                             toast.error("Failed to export PNG");
                             return;
@@ -825,7 +844,22 @@ export default function VerticalWorkspacePage() {
 
                 let bodyHtml = "";
                 if (canvasEl) {
-                    bodyHtml = `<img src='${canvasEl.toDataURL("image/png")}' style='max-width:100%;height:auto;' />`;
+                    const w = Math.max(1, canvasEl.width || canvasEl.clientWidth || 1);
+                    const h = Math.max(1, canvasEl.height || canvasEl.clientHeight || 1);
+
+                    const outCanvas = document.createElement("canvas");
+                    outCanvas.width = w;
+                    outCanvas.height = h;
+                    const ctx = outCanvas.getContext("2d");
+                    if (!ctx) {
+                        toast.error("PDF export failed");
+                        return;
+                    }
+                    ctx.fillStyle = "#ffffff";
+                    ctx.fillRect(0, 0, w, h);
+                    ctx.drawImage(canvasEl, 0, 0);
+
+                    bodyHtml = `<img src='${outCanvas.toDataURL("image/png")}' style='max-width:100%;height:auto;' />`;
                 } else if (svgEl) {
                     bodyHtml = svgEl.outerHTML;
                 } else {
