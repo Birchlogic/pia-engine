@@ -715,7 +715,95 @@ export default function VerticalWorkspacePage() {
         if (dfdRendererRef.current) {
             dfdRendererRef.current.exportPng();
         } else if (iframeRef.current) {
-            toast.info("PNG export is not available for the interactive DFD view. Use Export PDF or the diagram's own download controls.");
+            try {
+                const doc = iframeRef.current.contentDocument;
+                if (!doc) {
+                    toast.error("Unable to access diagram document for export");
+                    return;
+                }
+
+                const svgEl = doc.querySelector("svg");
+                const canvasEl = doc.querySelector("canvas") as HTMLCanvasElement | null;
+
+                const fileName = `dfd-${vertical?.name || verticalId}.png`;
+
+                if (canvasEl) {
+                    canvasEl.toBlob((blob) => {
+                        if (!blob) {
+                            toast.error("Failed to export PNG");
+                            return;
+                        }
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = fileName;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    }, "image/png");
+                    return;
+                }
+
+                if (!svgEl) {
+                    toast.error("No SVG/canvas diagram found to export");
+                    return;
+                }
+
+                const serializer = new XMLSerializer();
+                let svgText = serializer.serializeToString(svgEl);
+                if (!svgText.includes("xmlns=\"http://www.w3.org/2000/svg\"")) {
+                    svgText = svgText.replace("<svg", "<svg xmlns=\"http://www.w3.org/2000/svg\"");
+                }
+
+                const svgBlob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
+                const url = URL.createObjectURL(svgBlob);
+                const img = new Image();
+
+                img.onload = () => {
+                    const rect = svgEl.getBoundingClientRect();
+                    const w = Math.max(1, Math.round(rect.width));
+                    const h = Math.max(1, Math.round(rect.height));
+
+                    const outCanvas = document.createElement("canvas");
+                    outCanvas.width = w;
+                    outCanvas.height = h;
+                    const ctx = outCanvas.getContext("2d");
+                    if (!ctx) {
+                        URL.revokeObjectURL(url);
+                        toast.error("Failed to export PNG");
+                        return;
+                    }
+                    ctx.fillStyle = "#ffffff";
+                    ctx.fillRect(0, 0, w, h);
+                    ctx.drawImage(img, 0, 0, w, h);
+
+                    outCanvas.toBlob((blob) => {
+                        URL.revokeObjectURL(url);
+                        if (!blob) {
+                            toast.error("Failed to export PNG");
+                            return;
+                        }
+                        const outUrl = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = outUrl;
+                        a.download = fileName;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(outUrl);
+                    }, "image/png");
+                };
+
+                img.onerror = () => {
+                    URL.revokeObjectURL(url);
+                    toast.error("Failed to render SVG for export");
+                };
+
+                img.src = url;
+            } catch {
+                toast.error("Failed to export PNG from embedded diagram");
+            }
         } else {
             toast.error("No DFD available to export");
         }
@@ -726,8 +814,66 @@ export default function VerticalWorkspacePage() {
             dfdRendererRef.current.exportPdf();
         } else if (iframeRef.current) {
             try {
-                iframeRef.current.contentWindow?.focus();
-                iframeRef.current.contentWindow?.print();
+                const doc = iframeRef.current.contentDocument;
+                if (!doc) {
+                    toast.error("Unable to access diagram document for export");
+                    return;
+                }
+
+                const svgEl = doc.querySelector("svg");
+                const canvasEl = doc.querySelector("canvas") as HTMLCanvasElement | null;
+
+                let bodyHtml = "";
+                if (canvasEl) {
+                    bodyHtml = `<img src='${canvasEl.toDataURL("image/png")}' style='max-width:100%;height:auto;' />`;
+                } else if (svgEl) {
+                    bodyHtml = svgEl.outerHTML;
+                } else {
+                    toast.error("No SVG/canvas diagram found to export");
+                    return;
+                }
+
+                const printFrame = document.createElement("iframe");
+                printFrame.style.position = "fixed";
+                printFrame.style.right = "0";
+                printFrame.style.bottom = "0";
+                printFrame.style.width = "0";
+                printFrame.style.height = "0";
+                printFrame.style.border = "0";
+
+                const title = `Data Flow Diagram - ${vertical?.name || verticalId}`;
+                printFrame.srcdoc = `
+                  <html>
+                    <head>
+                      <title>${title}</title>
+                      <style>
+                        body { margin: 0; padding: 12mm; background: white; }
+                        svg { max-width: 100%; height: auto; }
+                        @page { margin: 12mm; }
+                      </style>
+                    </head>
+                    <body>
+                      ${bodyHtml}
+                      <script>
+                        window.onload = function () {
+                          setTimeout(function () {
+                            window.focus();
+                            window.print();
+                          }, 50);
+                        };
+                      </script>
+                    </body>
+                  </html>
+                `;
+
+                document.body.appendChild(printFrame);
+
+                const cleanup = () => {
+                    if (printFrame.parentNode) printFrame.parentNode.removeChild(printFrame);
+                };
+                const w = printFrame.contentWindow;
+                if (w) w.onafterprint = () => cleanup();
+                setTimeout(cleanup, 10_000);
             } catch {
                 toast.error("PDF export failed — browser blocked printing from the embedded diagram.");
             }
