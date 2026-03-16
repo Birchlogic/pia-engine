@@ -95,6 +95,9 @@ importers:
       sonner:
         specifier: ^2.0.7
         version: 2.0.7(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      sst:
+        specifier: 4.3.4
+        version: 4.3.4
       tailwind-merge:
         specifier: ^3.4.0
         version: 3.4.0
@@ -2528,6 +2531,9 @@ packages:
     resolution: {integrity: sha512-wvUjBtSGN7+7SjNpq/9M2Tg350UZD3q62IFZLbRAR1bSMlCo1ZaeW+BJ+D090e4hIIZLBcTDWe4Mh4jvUDajzQ==}
     engines: {node: '>= 0.4'}
 
+  aws4fetch@1.0.18:
+    resolution: {integrity: sha512-3Cf+YaUl07p24MoQ46rFwulAmiyCwH2+1zw1ZyPAX5OtJ34Hh185DwB8y/qRLb6cYYYtSFJ9pthyLc0MD4e8sQ==}
+
   axe-core@4.11.1:
     resolution: {integrity: sha512-BASOg+YwO2C+346x3LZOeoovTIoTrRqEsqMa6fmfAV0P+U9mFr9NsyOEpiYvFjbc64NMrSswhV50WdXzdb/Z5A==}
     engines: {node: '>=4'}
@@ -3776,6 +3782,9 @@ packages:
   jose@4.15.9:
     resolution: {integrity: sha512-1vUQX+IdDMVPj4k8kOxgUqlcK518yluMuGZwqlr44FS1ppZB/5GWh4rZG89erpOBOJjU/OBsnCVFfapsRz6nEA==}
 
+  jose@5.2.3:
+    resolution: {integrity: sha512-KUXdbctm1uHVL8BYhnyHkgp3zDX5KW8ZhAKVFEfUbU2P8Alpzjb+48hHvjOdQIyPshoblhzsuqOwEEAbtHVirA==}
+
   jose@6.2.1:
     resolution: {integrity: sha512-jUaKr1yrbfaImV7R2TN/b3IcZzsw38/chqMpo2XJ7i2F8AfM/lA4G1goC3JVEwg0H7UldTmSt3P68nt31W7/mw==}
 
@@ -4211,6 +4220,9 @@ packages:
   open@11.0.0:
     resolution: {integrity: sha512-smsWv2LzFjP03xmvFoJ331ss6h+jixfA4UUV/Bsiyuu4YJPfN+FIQGOIiv4w9/+MoHkfkJ22UIaQWRVFRfH6Vw==}
     engines: {node: '>=20'}
+
+  openid-client@5.6.4:
+    resolution: {integrity: sha512-T1h3B10BRPKfcObdBklX639tVz+xh34O7GjofqrqiAQdm7eHsQ00ih18x6wuJ/E6FxdtS2u3FmUGPDeEcMwzNA==}
 
   openid-client@5.7.1:
     resolution: {integrity: sha512-jDBPgSVfTnkIh71Hg9pRvtJc6wTwqjRkN88+gCFtYWrlP4Yx2Dsrow8uPi3qLr/aeymPF3o2+dS+wOpglK04ew==}
@@ -4696,6 +4708,50 @@ packages:
   split2@4.2.0:
     resolution: {integrity: sha512-UcjcJOWknrNkF6PLX83qcHM6KHgVKNkV62Y8a5uYDVv9ydGQVwAHMKqHdJje1VTWpljG0WYpCDhrCdAOYH4TWg==}
     engines: {node: '>= 10.x'}
+
+  sst-darwin-arm64@4.3.4:
+    resolution: {integrity: sha512-o212cQ0SSIPhSOXQLLDcNUXM7oZ7zbgIdDX23S9vgq4fWIcMHXUQQEhufOGzuLE+TDymwz6QRym447L8Nj5kuA==}
+    cpu: [arm64]
+    os: [darwin]
+
+  sst-darwin-x64@4.3.4:
+    resolution: {integrity: sha512-tuykuP7JXCedAeZZPIPAz/AdOoPickHA868C3snBwrgRV4fN96Ky6tQ/92XnPWIHi7NkDWImteNSz3fp8KvRIA==}
+    cpu: [x64]
+    os: [darwin]
+
+  sst-linux-arm64@4.3.4:
+    resolution: {integrity: sha512-hKVjGIXajqeSbFbjjTRsXXpib13k2XIoHmyGNM8VgfDBqtsZty1qiOSsVazImWTeurkAU9CNAGFV+O1PPDUZjw==}
+    cpu: [arm64]
+    os: [linux]
+
+  sst-linux-x64@4.3.4:
+    resolution: {integrity: sha512-4hEG5MFNQO4dMntoF2u9my0+Lz6e8rcFQA3D43Y6uIIX7Igv4eRfN5PQCoXliHQc0ABtRTiiQe63qGm/b/tW/A==}
+    cpu: [x64]
+    os: [linux]
+
+  sst-linux-x86@4.3.4:
+    resolution: {integrity: sha512-+/74j5okHQg8YRma69i2z6hDX/LLVsLYqpTFpbuUxxQTH0G/AXYviJdBhdBb9HcrqyKxi0Ol/9lnPwWNx4pHJw==}
+    cpu: [x86]
+    os: [linux]
+
+  sst-win32-arm64@4.3.4:
+    resolution: {integrity: sha512-b5w7ST4vjbWF9XcGqcRCp9/bU8W0JAw6Y6YflVrVQWVAUJnrjBMgLf+QzGOjhejElmVhezgBbbHWDaECEQ/KFw==}
+    cpu: [arm64]
+    os: [win32]
+
+  sst-win32-x64@4.3.4:
+    resolution: {integrity: sha512-dmyAdvmZft6euQKXYPftbrkhfJFnK2XJ3bsgIFRqw5y2y14/1+OK8qOJQCtXWv03TDnpNWJolA5hqjVLrrzKpw==}
+    cpu: [x64]
+    os: [win32]
+
+  sst-win32-x86@4.3.4:
+    resolution: {integrity: sha512-b76mW/qHbK6De3/6b93W/kzkTQH2vjjylqqNdjR06Gvoir+mSgaRAozGBkQyCMdC7qn52h46dHBKtm8l6xD8wQ==}
+    cpu: [x86]
+    os: [win32]
+
+  sst@4.3.4:
+    resolution: {integrity: sha512-hdRPESXvxBgjyiba1t3SDvS3rpdxvn0ZLXBXdxK7vMy1g/u5BW+11Rxwruz1WX3dGx9IoJUqSIMCXwvugzFK7A==}
+    hasBin: true
 
   stable-hash@0.0.5:
     resolution: {integrity: sha512-+L3ccpzibovGXFK+Ap/f8LOS0ahMrHTf3xu7mMLSpEGU0EO9ucaysSylKo9eRDFNhWve/y275iPmIZ4z39a9iA==}
@@ -8111,6 +8167,8 @@ snapshots:
     dependencies:
       possible-typed-array-names: 1.1.0
 
+  aws4fetch@1.0.18: {}
+
   axe-core@4.11.1: {}
 
   axobject-query@4.1.0: {}
@@ -9504,6 +9562,8 @@ snapshots:
 
   jose@4.15.9: {}
 
+  jose@5.2.3: {}
+
   jose@6.2.1: {}
 
   js-tokens@4.0.0: {}
@@ -9925,6 +9985,13 @@ snapshots:
       is-inside-container: 1.0.0
       powershell-utils: 0.1.0
       wsl-utils: 0.3.1
+
+  openid-client@5.6.4:
+    dependencies:
+      jose: 4.15.9
+      lru-cache: 6.0.0
+      object-hash: 2.2.0
+      oidc-token-hash: 5.2.0
 
   openid-client@5.7.1:
     dependencies:
@@ -10560,6 +10627,45 @@ snapshots:
   source-map@0.6.1: {}
 
   split2@4.2.0: {}
+
+  sst-darwin-arm64@4.3.4:
+    optional: true
+
+  sst-darwin-x64@4.3.4:
+    optional: true
+
+  sst-linux-arm64@4.3.4:
+    optional: true
+
+  sst-linux-x64@4.3.4:
+    optional: true
+
+  sst-linux-x86@4.3.4:
+    optional: true
+
+  sst-win32-arm64@4.3.4:
+    optional: true
+
+  sst-win32-x64@4.3.4:
+    optional: true
+
+  sst-win32-x86@4.3.4:
+    optional: true
+
+  sst@4.3.4:
+    dependencies:
+      aws4fetch: 1.0.18
+      jose: 5.2.3
+      openid-client: 5.6.4
+    optionalDependencies:
+      sst-darwin-arm64: 4.3.4
+      sst-darwin-x64: 4.3.4
+      sst-linux-arm64: 4.3.4
+      sst-linux-x64: 4.3.4
+      sst-linux-x86: 4.3.4
+      sst-win32-arm64: 4.3.4
+      sst-win32-x64: 4.3.4
+      sst-win32-x86: 4.3.4
 
   stable-hash@0.0.5: {}
 
