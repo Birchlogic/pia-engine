@@ -1,14 +1,9 @@
-name: Deploy to S3 and CloudFront
+name: Deploy with SST
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
-
-env:
-  AWS_REGION: us-east-1
-  S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
-  CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
 
 permissions:
   id-token: write
@@ -16,31 +11,33 @@ permissions:
 
 jobs:
   deploy:
-    name: Build & Deploy
+    name: Deploy to AWS
     runs-on: ubuntu-latest
     steps:
-      # ─── 1. Checkout code ───
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      # ─── 2. Setup Node.js ───
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      # ─── 3. Setup pnpm ───
       - name: Setup pnpm
         uses: pnpm/action-setup@v3
         with:
           version: 9
 
-      # ─── 4. Install dependencies ───
       - name: Install dependencies
         run: pnpm install
 
-      # ─── 5. Build Next.js App ───
-      - name: Build Next.js App
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Deploy with SST
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
@@ -55,46 +52,4 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SUPER_ADMIN_JWT_SECRET: ${{ secrets.SUPER_ADMIN_JWT_SECRET }}
           PAYLOAD_TOKEN: ${{ secrets.PAYLOAD_TOKEN }}
-        run: pnpm run build
-
-      # ─── 6. Configure AWS credentials ───
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      # ─── 7. Deploy to S3 ───
-      - name: Deploy to S3
-        run: |
-          if [ -z "$S3_BUCKET_NAME" ]; then
-            echo "Error: S3_BUCKET_NAME is empty. Please set S3_BUCKET_NAME in your GitHub Secrets."
-            exit 1
-          fi
-
-          # If output is set to "export" in next.config.ts, the build output will be in "out/"
-          # Otherwise it builds to ".next/"
-          if [ -d "out" ]; then
-            echo "Found 'out/' directory. Syncing static export to S3..."
-            aws s3 sync out/ s3://$S3_BUCKET_NAME --delete
-          elif [ -d ".next" ]; then
-            echo "Warning: No 'out' directory found. Syncing '.next' and 'public' directories instead."
-            aws s3 sync public/ s3://$S3_BUCKET_NAME/public --delete
-            aws s3 sync .next/static/ s3://$S3_BUCKET_NAME/_next/static --delete
-          else
-            echo "Error: No build directory ('out' or '.next') found."
-            exit 1
-          fi
-
-      # ─── 8. Invalidate CloudFront Cache ───
-      - name: Invalidate CloudFront
-        run: |
-          if [ -n "$CLOUDFRONT_DISTRIBUTION_ID" ]; then
-            echo "Invalidating CloudFront distribution $CLOUDFRONT_DISTRIBUTION_ID..."
-            aws cloudfront create-invalidation \
-              --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" \
-              --paths "/*"
-          else
-            echo "Warning: CLOUDFRONT_DISTRIBUTION_ID is not set in secrets. Skipping invalidation."
-          fi
+        run: pnpm exec sst deploy --stage production
