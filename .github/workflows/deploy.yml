@@ -68,6 +68,11 @@ jobs:
       # ─── 7. Deploy to S3 ───
       - name: Deploy to S3
         run: |
+          if [ -z "$S3_BUCKET_NAME" ]; then
+            echo "Error: S3_BUCKET_NAME is empty. Please set S3_BUCKET_NAME in your GitHub Secrets."
+            exit 1
+          fi
+
           # If output is set to "export" in next.config.ts, the build output will be in "out/"
           # Otherwise it builds to ".next/"
           if [ -d "out" ]; then
