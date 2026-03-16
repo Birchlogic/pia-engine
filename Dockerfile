@@ -3,14 +3,23 @@ FROM node:20-alpine AS deps
 RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
+# Install pnpm
+RUN npm install -g pnpm@9
+
+COPY package.json pnpm-lock.yaml* package-lock.json* ./
 COPY prisma ./prisma/
-RUN npm ci
-RUN npx prisma generate
+RUN if [ -f pnpm-lock.yaml ]; then pnpm i --frozen-lockfile; \
+    elif [ -f package-lock.json ]; then npm ci; \
+    else npm install; fi
+
+RUN pnpm dlx prisma generate
 
 # ── Stage 2: Build ──
 FROM node:20-alpine AS builder
 WORKDIR /app
+
+# Install pnpm
+RUN npm install -g pnpm@9
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -30,6 +39,8 @@ ARG S3_REGION
 ARG NEXTAUTH_SECRET
 ARG NEXTAUTH_URL
 ARG ANTHROPIC_API_KEY
+ARG SUPER_ADMIN_JWT_SECRET
+ARG PAYLOAD_TOKEN
 
 ENV DATABASE_URL=$DATABASE_URL
 ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
@@ -42,19 +53,18 @@ ENV S3_REGION=$S3_REGION
 ENV NEXTAUTH_SECRET=$NEXTAUTH_SECRET
 ENV NEXTAUTH_URL=$NEXTAUTH_URL
 ENV ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY
+ENV SUPER_ADMIN_JWT_SECRET=$SUPER_ADMIN_JWT_SECRET
+ENV PAYLOAD_TOKEN=$PAYLOAD_TOKEN
 
-RUN npm run build
+RUN pnpm run build
 
-# ── Stage 3: Production runner for Lambda ──
+# ── Stage 3: Production runner ──
 FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
-
-# Install AWS Lambda Web Adapter
-COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:1.0.0-rc1 /lambda-adapter /opt/extensions/lambda-adapter
 
 # Copy standalone output
 COPY --from=builder /app/.next/standalone ./
@@ -64,9 +74,5 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 
 EXPOSE 3000
-
-# Lambda Web Adapter listens on port 3000
-ENV AWS_LAMBDA_EXEC_WRAPPER=/opt/extensions/lambda-adapter
-ENV READINESS_CHECK_PATH=/api/auth/providers
 
 CMD ["node", "server.js"]
