@@ -92,9 +92,9 @@ export function LoginForm() {
                                 "Sign in"
                             )}
                         </Button>
-                        <p className="text-xs text-center text-muted-foreground mt-4">
+                        {/* <p className="text-xs text-center text-muted-foreground mt-4">
                             Demo: admin@kaizen.ai / password123
-                        </p>
+                        </p> */}
                     </form>
                 </CardContent>
             </Card>
