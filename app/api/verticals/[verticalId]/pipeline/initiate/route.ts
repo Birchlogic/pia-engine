@@ -3,6 +3,7 @@ import prisma from "@/lib/db/prisma";
 import { getCurrentUser, unauthorizedResponse } from "@/lib/auth/helpers";
 import { getSignedUrl } from "@/lib/supabase/client";
 import { SignJWT } from "jose";
+import { logActivity } from "@/lib/activity";
 
 const PIPELINE_API = process.env.DFD_API_BASE_URL || "http://35.170.54.12:8000";
 
@@ -91,10 +92,12 @@ export async function POST(
 
         const payloadData = {
             session_id: verticalId,
+            project_id: vertical.projectId,
             department: vertical.name,
             files: fileUrls,
             use_rlm: useRlm,
-            aggressive_processing: aggressiveProcessing
+            aggressive_processing: aggressiveProcessing,
+            email: user.email
         };
 
         const fullPayload = {
@@ -112,7 +115,11 @@ export async function POST(
             .setExpirationTime("15m")
             .sign(getPayloadSecret());
 
-        const finalBody = { token };
+        const finalBody = { 
+            token,
+            email: user.email,
+            projectId: vertical.projectId
+        };
 
         console.log(`[Pipeline Initiate] Sending signed JWT token to Python backend. Token payload:`, finalBody);
 
@@ -131,6 +138,15 @@ export async function POST(
         }
 
         const data = await res.json();
+        
+        await logActivity({
+            userId: user.id,
+            action: "INITIATE_PIPELINE",
+            entityType: "Vertical",
+            entityId: verticalId,
+            details: { useRlm, aggressiveProcessing }
+        });
+
         return NextResponse.json(data, { status: 200 });
     } catch (err) {
         if (err instanceof Error && err.message.includes("PAYLOAD_TOKEN")) {

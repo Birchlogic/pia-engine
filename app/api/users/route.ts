@@ -33,6 +33,9 @@ export async function GET() {
                 email: true,
                 role: true,
                 createdAt: true,
+                projectMemberships: {
+                    select: { projectId: true, role: true }
+                },
                 _count: {
                     select: { projectMemberships: true }
                 }
@@ -64,7 +67,7 @@ export async function POST(request: Request) {
         const result = createUserSchema.safeParse(body);
 
         if (!result.success) {
-            return errorResponse(result.error.errors[0].message, 400);
+            return errorResponse(result.error.issues[0].message, 400);
         }
 
         const { name, email, password, role } = result.data;

@@ -2,6 +2,7 @@ import prisma from "@/lib/db/prisma";
 import { getCurrentUser, requireVerticalOrgAccess } from "@/lib/auth/helpers";
 import { successResponse, errorResponse, unauthorizedResponse, forbiddenResponse, serverErrorResponse } from "@/lib/auth/responses";
 import { validateBody, createSessionSchema } from "@/lib/validations/schemas";
+import { logActivity } from "@/lib/activity";
 
 // POST /api/sessions — create session (org-scoped via vertical→project→org chain)
 export async function POST(request: Request) {
@@ -61,6 +62,14 @@ export async function POST(request: Request) {
                 status: "draft",
                 createdById: user.id,
             },
+        });
+
+        await logActivity({
+            userId: user.id,
+            action: "CREATE_SESSION",
+            entityType: "Session",
+            entityId: session.id,
+            details: { verticalId, sessionNumber: session.sessionNumber }
         });
 
         return successResponse(session, 201);

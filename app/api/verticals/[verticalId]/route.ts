@@ -1,6 +1,7 @@
 import prisma from "@/lib/db/prisma";
 import { getCurrentUser, requireVerticalOrgAccess } from "@/lib/auth/helpers";
 import { successResponse, unauthorizedResponse, forbiddenResponse, notFoundResponse, serverErrorResponse } from "@/lib/auth/responses";
+import { logActivity } from "@/lib/activity";
 
 // GET /api/verticals/[verticalId] — vertical detail (org-scoped)
 export async function GET(
@@ -89,6 +90,15 @@ export async function PUT(
             },
         });
 
+        await logActivity({
+            userId: user.id,
+            orgId: user.orgId,
+            action: "UPDATE_VERTICAL",
+            entityType: "Vertical",
+            entityId: verticalId,
+            details: { name: vertical.name }
+        });
+
         return successResponse(vertical);
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : "Unknown error";
@@ -111,6 +121,14 @@ export async function DELETE(
         await requireVerticalOrgAccess(user, verticalId);
 
         await prisma.vertical.delete({ where: { id: verticalId } });
+
+        await logActivity({
+            userId: user.id,
+            orgId: user.orgId,
+            action: "DELETE_VERTICAL",
+            entityType: "Vertical",
+            entityId: verticalId,
+        });
 
         return successResponse({ deleted: true, verticalId });
     } catch (error: unknown) {

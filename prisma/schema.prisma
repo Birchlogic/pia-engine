@@ -39,6 +39,7 @@ model User {
   organization         Organization?      @relation(fields: [orgId], references: [id])
   createdVerticals     Vertical[]         @relation("VerticalCreatedBy")
   projectMemberships   ProjectMember[]
+  activityLogs         ActivityLog[]
 
   @@index([orgId])
   @@map("users")
@@ -58,6 +59,7 @@ model Organization {
   creator         User      @relation("OrgCreatedBy", fields: [createdById], references: [id])
   projects        Project[]
   users           User[]
+  activityLogs    ActivityLog[]
 
   @@map("organizations")
 }
@@ -89,7 +91,7 @@ model ProjectMember {
   id        String      @id @default(uuid())
   projectId String      @map("project_id")
   userId    String      @map("user_id")
-  role      ProjectRole @default(viewer)
+  role      ProjectRole @default(analyst)
   createdAt DateTime    @default(now()) @map("created_at")
   project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -176,9 +178,8 @@ enum UserRole {
 }
 
 enum ProjectRole {
-  owner
-  editor
-  viewer
+  senior_assessor
+  analyst
 }
 
 enum SizeBand {
@@ -262,4 +263,25 @@ model LlmProvider {
   admin     SuperAdmin        @relation(fields: [addedBy], references: [id])
 
   @@map("llm_providers")
+}
+
+// ─── Activity Logs ───
+
+model ActivityLog {
+  id          String       @id @default(uuid())
+  userId      String       @map("user_id")
+  orgId       String?      @map("org_id")
+  action      String
+  entityType  String       @map("entity_type")
+  entityId    String       @map("entity_id")
+  details     Json?
+  ipAddress   String?      @map("ip_address")
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([userId])
+  @@map("activity_logs")
 }
