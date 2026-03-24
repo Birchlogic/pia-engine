@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
@@ -80,7 +81,9 @@ export default function DashboardLayout({
 
     return (
         <SidebarProvider>
-            <ActivityTracker />
+            <Suspense fallback={null}>
+                <ActivityTracker />
+            </Suspense>
             <Sidebar variant="inset">
                 <SidebarHeader>
                     <SidebarMenu>
