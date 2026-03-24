@@ -29,6 +29,7 @@ import { DfdHtmlRenderer, type DfdData } from "@/components/dfd/DfdHtmlRenderer"
 import { type KnowledgeGraph, type PrivacyDfd, type RenderPlan } from "@/components/dfd/EditableDfd";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import html2canvas from "html2canvas";
 import { Activity, ChevronDown, ChevronUp } from "lucide-react";
 import ListBasedDfdEditor from "@/components/dfd/ListBasedDfdEditor";
 import { PipelineStageTracker, type PipelineStatusResponse } from "@/components/pipeline/PipelineStageTracker";
@@ -219,6 +220,20 @@ export default function VerticalWorkspacePage() {
     const [jsonEditorOpen, setJsonEditorOpen] = useState(false);
     const [downloadingFiles, setDownloadingFiles] = useState<Set<string>>(new Set());
     const [activeTab, setActiveTab] = useState("sessions");
+
+    const handleTabChange = (val: string) => {
+        setActiveTab(val);
+        fetch("/api/activity", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                action: "VIEW_TAB",
+                entityType: "Vertical",
+                entityId: String(verticalId),
+                details: { tab: val, verticalName: vertical?.name || "Unknown Vertical" }
+            })
+        }).catch(err => console.error("[Tab Tracking] Error:", err));
+    };
 
     // Delete Session
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -729,6 +744,23 @@ export default function VerticalWorkspacePage() {
         }
     };
 
+    const logExportActivity = async (format: "PNG" | "PDF") => {
+        try {
+            await fetch("/api/activity", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action: "DFD_EXPORTED",
+                    entityType: "Vertical",
+                    entityId: verticalId,
+                    details: { format, verticalName: vertical?.name || "Unknown Vertical" }
+                })
+            });
+        } catch (e) {
+            console.error("Failed to log activity", e);
+        }
+    };
+
     const handleExportPng = () => {
         if (iframeRef.current) {
             try {
@@ -773,6 +805,7 @@ export default function VerticalWorkspacePage() {
                         a.click();
                         document.body.removeChild(a);
                         URL.revokeObjectURL(url);
+                        logExportActivity("PNG");
                     }, "image/png");
                     return;
                 }
@@ -824,6 +857,7 @@ export default function VerticalWorkspacePage() {
                         a.click();
                         document.body.removeChild(a);
                         URL.revokeObjectURL(outUrl);
+                        logExportActivity("PNG");
                     }, "image/png");
                 };
 
@@ -864,6 +898,7 @@ export default function VerticalWorkspacePage() {
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
                 toast.success("Exported DFD Viewer tab as PNG");
+                logExportActivity("PNG");
             }, "image/png");
         } catch (e) {
             console.error("html2canvas error:", e);
@@ -949,6 +984,7 @@ export default function VerticalWorkspacePage() {
                 const w = printFrame.contentWindow;
                 if (w) w.onafterprint = () => cleanup();
                 setTimeout(cleanup, 10_000);
+                logExportActivity("PDF");
             } catch {
                 toast.error("PDF export failed — browser blocked printing from the embedded diagram.");
             }
@@ -1006,6 +1042,7 @@ export default function VerticalWorkspacePage() {
             if (w) w.onafterprint = () => cleanup();
             setTimeout(cleanup, 10_000);
             toast.success("Exported DFD Viewer tab as PDF");
+            logExportActivity("PDF");
         } catch (e) {
             console.error("html2canvas PDF error:", e);
             toast.error("Failed to capture tab for PDF export");
@@ -1106,7 +1143,7 @@ export default function VerticalWorkspacePage() {
                 </div>
             </div>
 
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+            <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
                 <TabsList>
                     <TabsTrigger value="sessions">Sessions ({(vertical.sessions || []).length})</TabsTrigger>
                     <TabsTrigger value="matrix">Data Matrix</TabsTrigger>

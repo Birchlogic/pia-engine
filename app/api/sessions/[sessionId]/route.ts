@@ -1,6 +1,7 @@
 import prisma from "@/lib/db/prisma";
 import { getCurrentUser } from "@/lib/auth/helpers";
 import { successResponse, unauthorizedResponse, forbiddenResponse, notFoundResponse, serverErrorResponse } from "@/lib/auth/responses";
+import { logActivity } from "@/lib/activity";
 
 // Helper: verify session belongs to user's org via session → vertical → project → org chain
 async function verifySessionOrgAccess(user: { orgId: string | null }, sessionId: string) {
@@ -105,6 +106,15 @@ export async function PUT(
             data: updateData,
         });
 
+        await logActivity({
+            userId: user.id,
+            orgId: user.orgId,
+            action: "UPDATE_SESSION",
+            entityType: "Session",
+            entityId: sessionId,
+            details: { sessionNumber: session.sessionNumber }
+        });
+
         return successResponse(session);
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : "Unknown error";
@@ -127,6 +137,14 @@ export async function DELETE(
         await verifySessionOrgAccess(user, sessionId);
 
         await prisma.interviewSession.delete({ where: { id: sessionId } });
+
+        await logActivity({
+            userId: user.id,
+            orgId: user.orgId,
+            action: "DELETE_SESSION",
+            entityType: "Session",
+            entityId: sessionId,
+        });
 
         return successResponse({ deleted: true, sessionId });
     } catch (error: unknown) {

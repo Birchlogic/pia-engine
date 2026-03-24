@@ -9,6 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Activity, Users, Settings, RefreshCw } from "lucide-react";
 
 // ─── Types ───
 
@@ -43,6 +46,19 @@ interface LlmProviderConfig {
     status: string;
     createdAt: string;
     admin: { email: string };
+}
+
+interface ActivityLog {
+    id: string;
+    userId: string;
+    orgId: string | null;
+    action: string;
+    entityType: string;
+    entityId: string;
+    details: any;
+    createdAt: string;
+    user: { name: string; email: string };
+    organization: { name: string } | null;
 }
 
 // ─── API Helper ───
@@ -136,7 +152,44 @@ export default function SuperAdminDashboard() {
     const [showAddProvider, setShowAddProvider] = useState(false);
     const [providerForm, setProviderForm] = useState({ type: "CLAUDE", model: "", apiKey: "" });
 
+    // Activity Logs State
+    const [activitySummary, setActivitySummary] = useState<any[]>([]);
+    const [summaryLoading, setSummaryLoading] = useState(false);
+    const [selectedLogOrg, setSelectedLogOrg] = useState<any | null>(null);
+    const [selectedLogUser, setSelectedLogUser] = useState<any | null>(null);
+    const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+    const [logsLoading, setLogsLoading] = useState(false);
+
     const adminEmail = typeof window !== "undefined" ? localStorage.getItem("superAdminEmail") : "";
+
+    // ─── Load logs summary ───
+    const loadLogSummary = useCallback(async () => {
+        try {
+            setSummaryLoading(true);
+            const data = await apiFetch("/api/super-admin/activity-logs?action=summary");
+            if (data.success) setActivitySummary(data.data);
+        } catch {} finally {
+            setSummaryLoading(false);
+        }
+    }, [apiFetch]);
+
+    // ─── Load specific logs ───
+    const loadLogs = useCallback(async (userId?: string, orgId?: string) => {
+        try {
+            setLogsLoading(true);
+            let url = "/api/super-admin/activity-logs";
+            // if we have specific filters, append them
+            if (userId) {
+                url += `?userId=${userId}&orgId=${orgId === "SYSTEM" ? "" : (orgId || "")}`;
+            }
+            const data = await apiFetch(url);
+            if (data.success) setActivityLogs(data.data);
+        } catch {
+            // Handled
+        } finally {
+            setLogsLoading(false);
+        }
+    }, [apiFetch]);
 
     // ─── Load orgs ───
     const loadOrgs = useCallback(async () => {
@@ -450,9 +503,20 @@ export default function SuperAdminDashboard() {
             </header>
 
             <main className="max-w-7xl mx-auto px-6 py-8">
-                {/* Stats */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    <Card>
+                <Tabs defaultValue="tenants" className="space-y-6">
+                    <TabsList className="bg-muted/50 p-1 border">
+                        <TabsTrigger value="tenants" className="gap-2">
+                            <Users className="w-4 h-4" /> Tenant Management
+                        </TabsTrigger>
+                        <TabsTrigger value="activity" className="gap-2" onClick={loadLogSummary}>
+                            <Activity className="w-4 h-4" /> Activity Logs
+                        </TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="tenants" className="space-y-8 mt-0 border-none p-0 outline-none">
+                        {/* Stats */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                            <Card>
                         <CardHeader className="pb-2">
                             <CardTitle className="text-sm font-medium text-muted-foreground">Organizations</CardTitle>
                         </CardHeader>
@@ -734,6 +798,195 @@ export default function SuperAdminDashboard() {
                         )}
                     </Card>
                 </div>
+                </TabsContent>
+
+                <TabsContent value="activity" className="mt-0 border-none p-0 outline-none">
+                    <Card className="flex flex-col h-[calc(100vh-180px)] overflow-hidden">
+                        <CardHeader className="pb-4 border-b flex-none">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                <div className="flex items-center gap-3">
+                                    <div>
+                                        <CardTitle className="text-base flex items-center gap-2">
+                                            System Activity Logs
+                                            {!selectedLogOrg && (
+                                                <Button size="icon" variant="ghost" className="h-6 w-6 ml-1 text-muted-foreground hover:text-foreground" onClick={loadLogSummary} title="Refresh Summary">
+                                                    <RefreshCw className={`w-3.5 h-3.5 ${summaryLoading ? "animate-spin" : ""}`} />
+                                                </Button>
+                                            )}
+                                        </CardTitle>
+                                        <CardDescription className="text-xs mt-1">
+                                            {selectedLogOrg ? `Viewing activity for ${selectedLogOrg.orgName}` : "Monitor user actions hierarchically across all organizations."}
+                                        </CardDescription>
+                                    </div>
+                                </div>
+                                {selectedLogOrg && (
+                                    <div className="flex items-center gap-2">
+                                        <Button size="sm" variant="outline" onClick={() => loadLogSummary()} title="Refresh Organization Data">
+                                            <RefreshCw className={`w-4 h-4 mr-2 ${summaryLoading ? "animate-spin" : ""}`} />
+                                            Refresh
+                                        </Button>
+                                        <Button size="sm" variant="secondary" onClick={() => {
+                                            setSelectedLogUser(null);
+                                            setSelectedLogOrg(null);
+                                        }}>
+                                            ← Back to Organizations
+                                        </Button>
+                                    </div>
+                                )}
+                            </div>
+                        </CardHeader>
+                        
+                        <CardContent className="flex-1 p-0 bg-muted/5 sm:bg-background overflow-hidden flex flex-col">
+                            {!selectedLogOrg ? (
+                                // Tier 1: Organizations
+                                <div className="flex-1 overflow-y-auto p-6">
+                                    {summaryLoading ? (
+                                        <div className="p-8 text-center text-muted-foreground text-sm flex flex-col items-center gap-2">
+                                            <RefreshCw className="w-5 h-5 animate-spin" />
+                                            <span>Loading activity summary...</span>
+                                        </div>
+                                    ) : activitySummary.length === 0 ? (
+                                        <div className="p-8 text-center text-muted-foreground text-sm border border-dashed rounded-lg">No recorded organizational activity yet.</div>
+                                    ) : (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                            {activitySummary.map((org) => (
+                                                <Card key={org.orgId} className="cursor-pointer hover:bg-muted/50 transition-all shadow-sm border-muted-foreground/20 hover:border-primary/50" onClick={() => setSelectedLogOrg(org)}>
+                                                    <CardContent className="p-5 flex flex-col gap-2">
+                                                        <div className="font-semibold text-sm truncate">{org.orgName}</div>
+                                                        <div className="flex items-center justify-between text-xs text-muted-foreground mt-2">
+                                                            <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> {org.users.length} Users</span>
+                                                            <span className="flex items-center gap-1.5"><Activity className="w-3.5 h-3.5" /> {org.users.reduce((sum: number, u: any) => sum + u.logCount, 0)} Logs</span>
+                                                        </div>
+                                                    </CardContent>
+                                                </Card>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                // Tier 2 & 3: Split Pane
+                                <div className="flex flex-1 overflow-hidden">
+                                     {/* Left Pane: Users List */}
+                                     <div className="w-1/4 min-w-[260px] max-w-[320px] border-r overflow-y-auto bg-muted/10 flex flex-col">
+                                         <div className="p-3 border-b bg-muted/30 sticky top-0 z-10 flex items-center justify-between">
+                                             <div className="text-xs font-semibold flex items-center gap-2 text-foreground/80">
+                                                 <Users className="w-3.5 h-3.5" />
+                                                 Organization Users
+                                             </div>
+                                             <Badge variant="secondary" className="text-[10px]">{selectedLogOrg.users.length}</Badge>
+                                         </div>
+                                         <div className="p-2 space-y-1">
+                                             {selectedLogOrg.users.map((u: any) => (
+                                                 <button
+                                                     key={u.userId}
+                                                     onClick={() => {
+                                                         setSelectedLogUser(u);
+                                                         loadLogs(u.userId, selectedLogOrg.orgId);
+                                                     }}
+                                                     className={`w-full text-left p-3 rounded-md transition-all ${selectedLogUser?.userId === u.userId ? "bg-primary/10 border border-primary/20 shadow-sm" : "hover:bg-muted/50 border border-transparent"}`}
+                                                 >
+                                                     <div className="font-medium text-sm truncate">{u.userName}</div>
+                                                     <div className="text-[10px] text-muted-foreground truncate mb-1.5">{u.email}</div>
+                                                     <div className="text-[10px] text-primary flex items-center gap-1 font-medium"><Activity className="w-3 h-3"/> {u.logCount} Logs</div>
+                                                 </button>
+                                             ))}
+                                         </div>
+                                     </div>
+
+                                     {/* Right Pane: Logs Table */}
+                                     <div className="flex-1 flex flex-col overflow-hidden bg-background relative">
+                                         {!selectedLogUser ? (
+                                             <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+                                                 <div className="w-12 h-12 rounded-full bg-muted/50 flex items-center justify-center mb-4 border border-dashed border-muted-foreground/30">
+                                                    <Users className="w-5 h-5 text-muted-foreground" />
+                                                 </div>
+                                                 <h3 className="text-base font-medium text-foreground">Select a user</h3>
+                                                 <p className="text-xs text-muted-foreground mt-1 max-w-sm">
+                                                     Choose a user from the left panel to view their detailed activity history.
+                                                 </p>
+                                             </div>
+                                         ) : (
+                                             <div className="flex flex-col h-full overflow-hidden">
+                                                 <div className="bg-muted/5 px-4 py-3 border-b flex items-center justify-between sticky top-0 z-10">
+                                                     <div className="flex items-center gap-3">
+                                                         <div>
+                                                             <div className="font-medium text-sm">Activity logs for {selectedLogUser.userName}</div>
+                                                             <div className="text-xs text-muted-foreground">{selectedLogUser.email}</div>
+                                                         </div>
+                                                     </div>
+                                                     <div className="flex items-center gap-2">
+                                                         <Badge variant="outline" className="text-[10px] uppercase font-mono tracking-tight hidden sm:flex">{selectedLogOrg.orgName}</Badge>
+                                                         <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => loadLogs(selectedLogUser.userId, selectedLogOrg.orgId)} title="Refresh User Logs">
+                                                             <RefreshCw className={`w-3.5 h-3.5 ${logsLoading ? "animate-spin" : ""}`} />
+                                                         </Button>
+                                                     </div>
+                                                 </div>
+                                                 <div className="flex-1 overflow-y-auto relative p-0">
+                                                     {logsLoading ? (
+                                                         <div className="absolute inset-0 bg-background/50 backdrop-blur-sm z-20 flex flex-col items-center justify-center">
+                                                            <RefreshCw className="w-6 h-6 animate-spin text-primary mb-2" />
+                                                            <span className="text-xs text-muted-foreground font-medium">Loading logs...</span>
+                                                         </div>
+                                                     ) : null}
+                                                     
+                                                     {activityLogs.length === 0 && !logsLoading ? (
+                                                         <div className="p-8 text-center text-muted-foreground text-sm mt-10 border border-dashed rounded-lg mx-4">No specific logs found.</div>
+                                                     ) : (
+                                                         <Table>
+                                                             <TableHeader className="sticky top-0 bg-background z-10 shadow-sm border-b">
+                                                                 <TableRow className="hover:bg-transparent">
+                                                                     <TableHead className="w-[160px] text-xs">Timestamp</TableHead>
+                                                                     <TableHead className="w-[120px] text-xs">Action</TableHead>
+                                                                     <TableHead className="w-[160px] text-xs">Entity</TableHead>
+                                                                     <TableHead className="text-xs">Details</TableHead>
+                                                                 </TableRow>
+                                                             </TableHeader>
+                                                             <TableBody>
+                                                                 {activityLogs.map((log) => (
+                                                                     <TableRow key={log.id} className="hover:bg-muted/30 border-b">
+                                                                         <TableCell className="text-[11px] text-muted-foreground whitespace-nowrap align-top">
+                                                                             {new Date(log.createdAt).toLocaleString()}
+                                                                         </TableCell>
+                                                                         <TableCell className="align-top">
+                                                                             <Badge variant="outline" className="text-[9px] uppercase font-mono tracking-tight bg-slate-50 dark:bg-slate-900 border-primary/20 text-primary">
+                                                                                 {log.action.replace(/_/g, " ")}
+                                                                             </Badge>
+                                                                         </TableCell>
+                                                                         <TableCell className="align-top">
+                                                                             <div className="text-xs font-semibold truncate max-w-[150px]">{log.entityType}</div>
+                                                                             <div className="text-[9px] font-mono text-muted-foreground truncate max-w-[150px]" title={log.entityId}>
+                                                                                 {log.entityId.split("-")[0]}...
+                                                                             </div>
+                                                                         </TableCell>
+                                                                         <TableCell className="align-top">
+                                                                             {log.details && Object.keys(log.details).length > 0 ? (
+                                                                                 <div className="text-[11px] text-muted-foreground space-y-0.5 max-w-full overflow-hidden">
+                                                                                     {Object.entries(log.details).map(([k, v]) => (
+                                                                                         <div key={k} className="flex gap-2 w-full break-all">
+                                                                                             <span className="font-medium text-foreground opacity-60 w-16 flex-shrink-0 truncate">{k}:</span>
+                                                                                             <span className="font-mono text-[10px] break-all">{String(v)}</span>
+                                                                                         </div>
+                                                                                     ))}
+                                                                                 </div>
+                                                                             ) : (
+                                                                                 <span className="text-muted-foreground opacity-50">—</span>
+                                                                             )}
+                                                                         </TableCell>
+                                                                     </TableRow>
+                                                                 ))}
+                                                             </TableBody>
+                                                         </Table>
+                                                     )}
+                                                 </div>
+                                             </div>
+                                         )}
+                                     </div>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+                </Tabs>
             </main>
 
             {/* ─── Create Org Modal ─── */}

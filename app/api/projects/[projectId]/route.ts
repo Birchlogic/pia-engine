@@ -1,6 +1,7 @@
 import prisma from "@/lib/db/prisma";
 import { getCurrentUser, requireProjectOrgAccess } from "@/lib/auth/helpers";
 import { successResponse, unauthorizedResponse, forbiddenResponse, notFoundResponse, serverErrorResponse } from "@/lib/auth/responses";
+import { logActivity } from "@/lib/activity";
 
 // GET /api/projects/[projectId] — project detail (org-scoped)
 export async function GET(
@@ -22,7 +23,13 @@ export async function GET(
                 organization: { select: { id: true, name: true } },
                 verticals: {
                     orderBy: { sortOrder: "asc" },
-                    include: { _count: { select: { sessions: true } } },
+                    include: {
+                        sessions: {
+                            where: { status: "finalized" },
+                            select: { id: true, sessionNumber: true, sessionDate: true }
+                        },
+                        _count: { select: { sessions: true } }
+                    },
                 },
                 members: {
                     include: { user: { select: { id: true, name: true, email: true } } },
@@ -70,6 +77,15 @@ export async function PUT(
             },
         });
 
+        await logActivity({
+            userId: user.id,
+            orgId: user.orgId,
+            action: "UPDATE_PROJECT",
+            entityType: "Project",
+            entityId: projectId,
+            details: { name: project.name }
+        });
+
         return successResponse(project);
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : "Unknown error";
@@ -96,6 +112,14 @@ export async function DELETE(
         await requireProjectOrgAccess(user, projectId);
 
         await prisma.project.delete({ where: { id: projectId } });
+
+        await logActivity({
+            userId: user.id,
+            orgId: user.orgId,
+            action: "DELETE_PROJECT",
+            entityType: "Project",
+            entityId: projectId,
+        });
 
         return successResponse({ deleted: true, projectId });
     } catch (error: unknown) {

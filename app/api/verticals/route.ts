@@ -2,6 +2,7 @@ import prisma from "@/lib/db/prisma";
 import { getCurrentUser, requireProjectOrgAccess } from "@/lib/auth/helpers";
 import { successResponse, errorResponse, unauthorizedResponse, forbiddenResponse, serverErrorResponse } from "@/lib/auth/responses";
 import { validateBody, createVerticalSchema } from "@/lib/validations/schemas";
+import { logActivity } from "@/lib/activity";
 
 // GET /api/verticals?projectId=xxx — list verticals (org-scoped)
 export async function GET(request: Request) {
@@ -72,6 +73,14 @@ export async function POST(request: Request) {
                 sortOrder: (maxSort._max.sortOrder ?? -1) + 1,
                 createdById: user.id,
             },
+        });
+
+        await logActivity({
+            userId: user.id,
+            action: "CREATE_VERTICAL",
+            entityType: "Vertical",
+            entityId: vertical.id,
+            details: { name: vertical.name, projectId }
         });
 
         return successResponse(vertical, 201);

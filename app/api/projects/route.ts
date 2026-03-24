@@ -2,6 +2,7 @@ import prisma from "@/lib/db/prisma";
 import { getCurrentUser, requireOrgMatch } from "@/lib/auth/helpers";
 import { successResponse, errorResponse, unauthorizedResponse, forbiddenResponse, serverErrorResponse } from "@/lib/auth/responses";
 import { validateBody, createProjectSchema } from "@/lib/validations/schemas";
+import { logActivity } from "@/lib/activity";
 
 // GET /api/projects — list projects for user's org
 export async function GET(request: Request) {
@@ -21,8 +22,15 @@ export async function GET(request: Request) {
             return forbiddenResponse("Access denied: organization mismatch");
         }
 
+        const whereClause: any = { orgId: user.orgId };
+        
+        // Filter by user access if not an org admin
+        if (user.role !== "admin") {
+            whereClause.members = { some: { userId: user.id } };
+        }
+
         const projects = await prisma.project.findMany({
-            where: { orgId: user.orgId },
+            where: whereClause,
             include: {
                 _count: { select: { verticals: true, members: true } },
                 creator: { select: { name: true } },
@@ -89,11 +97,21 @@ export async function POST(request: Request) {
                 data: {
                     projectId: project.id,
                     userId: user.id,
-                    role: "owner",
+                    role: "senior_assessor",
                 },
             });
 
             return project;
+        });
+
+        // Track Activity
+        await logActivity({
+            userId: user.id,
+            orgId,
+            action: "CREATE_PROJECT",
+            entityType: "Project",
+            entityId: result.id,
+            details: { name: result.name, type: result.assessmentType }
         });
 
         return successResponse(result, 201);

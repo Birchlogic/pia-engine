@@ -2,6 +2,7 @@ import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import prisma from "@/lib/db/prisma";
+import { logActivity } from "@/lib/activity";
 
 export const authOptions: NextAuthOptions = {
     providers: [
@@ -69,6 +70,28 @@ export const authOptions: NextAuthOptions = {
                 (session.user as { orgId: string | null }).orgId = token.orgId as string | null;
             }
             return session;
+        },
+    },
+    events: {
+        async signIn({ user }) {
+            try {
+                // Ensure we have an ID and an explicit logActivity call
+                if (user && user.id) {
+                    await logActivity({
+                        userId: user.id,
+                        action: "USER_LOGIN",
+                        entityType: "User",
+                        entityId: user.id,
+                        details: {
+                            email: user.email,
+                            role: (user as any).role,
+                        },
+                        orgId: (user as any).orgId,
+                    });
+                }
+            } catch (e) {
+                console.error("[Auth Event] Failed to log signIn activity:", e);
+            }
         },
     },
     pages: {

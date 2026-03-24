@@ -2,6 +2,7 @@ import prisma from "@/lib/db/prisma";
 import { getCurrentUser } from "@/lib/auth/helpers";
 import { successResponse, errorResponse, unauthorizedResponse, forbiddenResponse, serverErrorResponse } from "@/lib/auth/responses";
 import { z } from "zod";
+import { logActivity } from "@/lib/activity";
 
 export async function GET(request: Request, { params }: { params: Promise<{ projectId: string }> }) {
     try {
@@ -45,7 +46,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ proj
 
 const assignMemberSchema = z.object({
     userId: z.string().uuid(),
-    role: z.enum(["owner", "admin", "member", "viewer"]),
+    role: z.enum(["senior_assessor", "analyst"]),
 });
 
 export async function POST(request: Request, { params }: { params: Promise<{ projectId: string }> }) {
@@ -89,6 +90,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ pro
             include: { user: { select: { id: true, name: true, email: true, role: true } } },
         });
 
+        // Track Activity
+        await logActivity({
+            userId: user.id,
+            orgId: user.orgId,
+            action: "ASSIGN_PROJECT",
+            entityType: "Project",
+            entityId: projectId,
+            details: { assignedUser: targetUser.email, role }
+        });
+
         return successResponse({
             id: member.id,
             userId: member.userId,
@@ -99,6 +110,57 @@ export async function POST(request: Request, { params }: { params: Promise<{ pro
         }, 201);
     } catch (error) {
         console.error("[Project Members POST]", error);
+        return serverErrorResponse();
+    }
+}
+
+export async function DELETE(request: Request, { params }: { params: Promise<{ projectId: string }> }) {
+    try {
+        const user = await getCurrentUser();
+        if (!user || !user.orgId) return unauthorizedResponse();
+
+        // Only org admins or project owners can remove members
+        if (user.role !== "admin") {
+            return forbiddenResponse("Only admins can manage project members");
+        }
+
+        const { projectId } = await params;
+        const { searchParams } = new URL(request.url);
+        const userId = searchParams.get("userId");
+
+        if (!userId) {
+            return errorResponse("Missing userId", 400);
+        }
+
+        // Verify project
+        const project = await prisma.project.findUnique({ where: { id: projectId } });
+        if (!project || project.orgId !== user.orgId) {
+            return forbiddenResponse("Project not found or access denied");
+        }
+
+        const deleted = await prisma.projectMember.deleteMany({
+            where: {
+                projectId,
+                userId,
+                // Optional logic: prevent deleting the last owner, etc.
+            }
+        });
+
+        if (deleted.count > 0) {
+            // Track Activity
+            await logActivity({
+                userId: user.id,
+                orgId: user.orgId,
+                action: "REMOVE_PROJECT",
+                entityType: "Project",
+                entityId: projectId,
+                details: { removedUserId: userId }
+            });
+        }
+
+        return successResponse({ success: true }, 200);
+    } catch (error) {
+        console.error("[Project Members DELETE]", error);
         return serverErrorResponse();
     }
 }

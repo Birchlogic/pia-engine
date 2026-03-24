@@ -28,6 +28,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { ModeToggle } from "@/components/mode-toggle";
+import { ActivityTracker } from "@/components/ActivityTracker";
 
 const getNavItems = (role?: string) => {
     const items = [
@@ -79,6 +80,7 @@ export default function DashboardLayout({
 
     return (
         <SidebarProvider>
+            <ActivityTracker />
             <Sidebar variant="inset">
                 <SidebarHeader>
                     <SidebarMenu>

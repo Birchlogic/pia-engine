@@ -35,6 +35,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 
 type User = {
     id: string;
@@ -42,17 +43,26 @@ type User = {
     email: string;
     role: string;
     createdAt: string;
+    projectMemberships?: { projectId: string, role: string }[];
     _count: { projectMemberships: number };
 };
 
 export default function UsersPage() {
     const { data: session, status } = useSession();
     const [users, setUsers] = useState<User[]>([]);
+    const [projects, setProjects] = useState<{ id: string, name: string }[]>([]);
     const [loading, setLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [creating, setCreating] = useState(false);
+    
+    // Removal State
     const [removingUserId, setRemovingUserId] = useState<string | null>(null);
     const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
+
+    // Assignment State
+    const [assignUserId, setAssignUserId] = useState<string | null>(null);
+    const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+    const [processingProject, setProcessingProject] = useState<string | null>(null);
 
     const [form, setForm] = useState({
         name: "",
@@ -71,7 +81,20 @@ export default function UsersPage() {
         }
 
         fetchUsers();
+        fetchProjects();
     }, [session, status]);
+
+    const fetchProjects = async () => {
+        try {
+            const res = await fetch("/api/projects");
+            const data = await res.json();
+            if (data.success) {
+                setProjects(data.data);
+            }
+        } catch (error) {
+            console.error("Failed to fetch projects", error);
+        }
+    };
 
     const fetchUsers = async () => {
         setLoading(true);
@@ -152,6 +175,45 @@ export default function UsersPage() {
         } finally {
             setRemoveDialogOpen(false);
             setRemovingUserId(null);
+        }
+    };
+
+    const openAssignDialog = (userId: string) => {
+        setAssignUserId(userId);
+        setAssignDialogOpen(true);
+    };
+
+    const toggleProjectAssignment = async (projectId: string, isAssigned: boolean) => {
+        if (!assignUserId || processingProject) return;
+        setProcessingProject(projectId);
+        
+        try {
+            if (isAssigned) {
+                // Remove Access
+                const res = await fetch(`/api/projects/${projectId}/members?userId=${assignUserId}`, {
+                    method: "DELETE"
+                });
+                if (res.ok) {
+                    toast.success("Access revoked");
+                }
+            } else {
+                // Grant Access (Defaulting to Analyst)
+                const res = await fetch(`/api/projects/${projectId}/members`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ userId: assignUserId, role: "analyst" })
+                });
+                if (res.ok) {
+                    toast.success("Access granted");
+                }
+            }
+            // Seamlessly refresh users to update their badges
+            await fetchUsers();
+        } catch (error) {
+            console.error(error);
+            toast.error("Failed to update access");
+        } finally {
+            setProcessingProject(null);
         }
     };
 
@@ -309,6 +371,10 @@ export default function UsersPage() {
                                                         </Button>
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent align="end">
+                                                        <DropdownMenuItem onClick={() => openAssignDialog(userObj.id)} className="cursor-pointer">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 mr-2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+                                                            Manage Projects
+                                                        </DropdownMenuItem>
                                                         <DropdownMenuItem
                                                             onClick={() => confirmRemoveUser(userObj.id)}
                                                             className="text-destructive focus:text-destructive cursor-pointer focus:bg-destructive/10"
@@ -346,6 +412,42 @@ export default function UsersPage() {
                             Confirm Removal
                         </Button>
                     </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Assign Projects Modal */}
+            <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
+                <DialogContent className="sm:max-w-[500px]">
+                    <DialogHeader>
+                        <DialogTitle>Manage Project Access</DialogTitle>
+                        <DialogDescription>
+                            Toggle which projects this user can access. They will be granted Editor permissions by default.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4 space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+                        {projects.length === 0 ? (
+                            <p className="text-sm text-muted-foreground text-center p-4">No projects available in this organization.</p>
+                        ) : (
+                            projects.map(proj => {
+                                const selectedUser = users.find(u => u.id === assignUserId);
+                                const isAssigned = selectedUser?.projectMemberships?.some((m: any) => m.projectId === proj.id) || false;
+                                
+                                return (
+                                    <div key={proj.id} className="flex items-center justify-between p-3 border rounded-md shadow-sm">
+                                        <div>
+                                            <p className="font-medium text-sm">{proj.name}</p>
+                                            <p className="text-[10px] text-muted-foreground">ID: {proj.id.split("-")[0]}</p>
+                                        </div>
+                                        <Checkbox 
+                                            checked={isAssigned} 
+                                            disabled={processingProject === proj.id}
+                                            onCheckedChange={() => toggleProjectAssignment(proj.id, isAssigned)} 
+                                        />
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
                 </DialogContent>
             </Dialog>
         </div>
