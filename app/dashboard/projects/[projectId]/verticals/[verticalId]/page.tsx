@@ -2212,27 +2212,13 @@ export default function VerticalWorkspacePage() {
                 </TabsContent>
 
                 <TabsContent value="dfd" className="space-y-4 min-w-0 overflow-x-auto" data-tab-content="dfd">
-                    {(dfdHtml || dfdData) && (
-                        <div className="flex items-center justify-end gap-2 mb-2">
-                        </div>
-                    )}
                     {dfdLoading ? (
                         <div className="space-y-3">
                             <Skeleton className="h-64 w-full" />
                         </div>
-                    ) : dfdHtml ? (
-                        <div className="w-full relative min-h-[800px] h-[90vh] min-w-0 rounded-lg border overflow-hidden">
-                            <iframe
-                                ref={iframeRef}
-                                srcDoc={dfdHtml}
-                                className="w-full h-full border-none"
-                                title="Data Flow Diagram"
-                                sandbox="allow-scripts allow-same-origin allow-modals allow-downloads allow-popups"
-                            />
-                        </div>
                     ) : dfdData ? (
                         <div className="w-full relative min-h-[500px] min-w-0 overflow-x-auto">
-                            <DfdHtmlRenderer dfd={dfdData} />
+                            <DfdHtmlRenderer dfd={dfdData} ref={dfdRendererRef} />
                         </div>
                     ) : (
                         <Card className="flex flex-col items-center justify-center p-12 bg-slate-50 border-dashed border-2">

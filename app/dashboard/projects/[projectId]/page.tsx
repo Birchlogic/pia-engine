@@ -7,6 +7,8 @@ import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
     AlertDialog,
@@ -18,7 +20,6 @@ import {
     AlertDialogCancel,
     AlertDialogAction,
 } from "@/components/ui/alert-dialog";
-import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -51,7 +52,26 @@ import {
     Plus
 } from "lucide-react";
 import { DfdHtmlRenderer } from "@/components/dfd/DfdHtmlRenderer";
+import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { formatError } from "@/lib/utils";
+
+interface MasterKgRisk {
+    description: string;
+    severity: string;
+    risk_name?: string;
+    source?: string;
+}
+
+interface MasterKgNode {
+    id: string;
+    name: string;
+    type: string;
+    aliases: string[];
+    data_elements: string[];
+    risks: MasterKgRisk[];
+    sources: string[];
+    _source_sessions: string[];
+}
 
 interface MasterDfdResults {
     project_id: string;
@@ -76,6 +96,12 @@ interface MasterDfdResults {
     };
     dfd_json?: any;
     master_html?: string;
+    master_kg?: {
+        nodes: MasterKgNode[];
+        edges: any[];
+        dialogue_records?: any[];
+    };
+    master_render_plan?: any;
 }
 
 type Vertical = {
@@ -172,6 +198,10 @@ export default function ProjectPage() {
     const [masterDfdResults, setMasterDfdResults] = useState<MasterDfdResults | null>(null);
     const [pollingMaster, setPollingMaster] = useState(false);
     const [generatingMaster, setGeneratingMaster] = useState(false);
+    const [summaryExpanded, setSummaryExpanded] = useState(false);
+    const [masterDfdSubTab, setMasterDfdSubTab] = useState<"overview" | "dfd">("overview");
+    const [selectedRiskSeverity, setSelectedRiskSeverity] = useState<string | null>(null);
+    const [riskDetailsOpen, setRiskDetailsOpen] = useState(false);
 
     const fetchProject = async () => {
         const res = await fetch(`/api/projects/${projectId}`);
@@ -815,115 +845,198 @@ export default function ProjectPage() {
                                 </Card>
                             ) : masterDfdResults ? (
                                 <div className="space-y-4">
-                                    {/* Summary Stats */}
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                        <Card>
-                                            <CardHeader className="py-2 px-4">
-                                                <CardDescription className="text-[10px]">Total Nodes</CardDescription>
-                                                <CardTitle className="text-lg">{masterDfdResults.overview_summary?.total_nodes || 0}</CardTitle>
-                                            </CardHeader>
-                                        </Card>
-                                        <Card>
-                                            <CardHeader className="py-2 px-4">
-                                                <CardDescription className="text-[10px]">Total Flows</CardDescription>
-                                                <CardTitle className="text-lg">{masterDfdResults.overview_summary?.total_edges || 0}</CardTitle>
-                                            </CardHeader>
-                                        </Card>
-                                        <Card>
-                                            <CardHeader className="py-2 px-4">
-                                                <CardDescription className="text-[10px]">Data Elements</CardDescription>
-                                                <CardTitle className="text-lg">{masterDfdResults.overview_summary?.total_data_elements || 0}</CardTitle>
-                                            </CardHeader>
-                                        </Card>
-                                        <Card>
-                                            <CardHeader className="py-2 px-4">
-                                                <CardDescription className="text-[10px]">Risks Found</CardDescription>
-                                                <CardTitle className="text-lg text-destructive">{masterDfdResults.overview_summary?.total_risks || 0}</CardTitle>
-                                            </CardHeader>
-                                        </Card>
+                                    {/* Sub-tabs for Overview and DFD */}
+                                    <div className="flex items-center gap-1 bg-muted rounded-lg p-1 w-fit">
+                                        <button
+                                            onClick={() => setMasterDfdSubTab("overview")}
+                                            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                                                masterDfdSubTab === "overview"
+                                                    ? "bg-background text-foreground shadow-sm"
+                                                    : "text-muted-foreground hover:text-foreground"
+                                            }`}
+                                        >
+                                            Overview
+                                        </button>
+                                        <button
+                                            onClick={() => (masterDfdResults.master_html || masterDfdResults.dfd_json) && setMasterDfdSubTab("dfd")}
+                                            disabled={!masterDfdResults.master_html && !masterDfdResults.dfd_json}
+                                            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                                                masterDfdSubTab === "dfd"
+                                                    ? "bg-background text-foreground shadow-sm"
+                                                    : (!masterDfdResults.master_html && !masterDfdResults.dfd_json)
+                                                    ? "text-muted-foreground/50 cursor-not-allowed"
+                                                    : "text-muted-foreground hover:text-foreground"
+                                            }`}
+                                        >
+                                            DFD Visualization
+                                        </button>
                                     </div>
 
-                                    {/* DFD Visual */}
-                                    <Card className="overflow-hidden">
-                                        <CardHeader className="border-b py-3 px-4 flex flex-row items-center justify-between">
-                                            <CardTitle className="text-sm">Interactive Master DFD</CardTitle>
-                                            <div className="flex gap-2">
-                                                <Badge variant="outline" className="text-[10px]">
-                                                    {masterDfdResults.overview_summary?.total_sessions} Sessions Merged
-                                                </Badge>
-                                                <Badge variant="outline" className="text-[10px] bg-primary/5">
-                                                    {masterDfdResults.overview_summary?.departments.join(", ")}
-                                                </Badge>
-                                            </div>
-                                        </CardHeader>
-                                        <CardContent className="p-0 bg-white min-h-[500px] relative">
-                                            {masterDfdResults.dfd_json ? (
-                                                <DfdHtmlRenderer dfd={masterDfdResults.dfd_json} />
-                                            ) : (
-                                                <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm italic">
-                                                    Visual layout not available
-                                                </div>
-                                            )}
-                                        </CardContent>
-                                    </Card>
-
-                                    {/* AI Executive Summary & Detailed Stats */}
-                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                        <Card className="col-span-1">
-                                            <CardHeader className="pb-3 border-b">
-                                                <CardTitle className="text-sm flex items-center gap-2">
-                                                    <FileText className="w-4 h-4 text-primary" />
-                                                    AI Executive Insights
-                                                </CardTitle>
-                                            </CardHeader>
-                                            <CardContent className="pt-4 overflow-y-auto max-h-[400px]">
-                                                <div className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                                                    {masterDfdResults.overview_summary?.ai_executive_summary}
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-
+                                    {/* Overview Tab */}
+                                    {masterDfdSubTab === "overview" && (
                                         <div className="space-y-4">
-                                            <Card>
-                                                <CardHeader className="pb-3 border-b">
-                                                    <CardTitle className="text-sm flex items-center gap-2">
-                                                        <ShieldAlert className="w-4 h-4 text-destructive" />
-                                                        Risk Breakdown
-                                                    </CardTitle>
-                                                </CardHeader>
-                                                <CardContent className="pt-4">
-                                                    <div className="grid grid-cols-2 gap-2">
+                                            {/* Summary Stats */}
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                                <Card>
+                                                    <CardHeader className="py-2 px-4">
+                                                        <CardDescription className="text-[10px]">Total Nodes</CardDescription>
+                                                        <CardTitle className="text-lg">{masterDfdResults.overview_summary?.total_nodes || 0}</CardTitle>
+                                                    </CardHeader>
+                                                </Card>
+                                                <Card>
+                                                    <CardHeader className="py-2 px-4">
+                                                        <CardDescription className="text-[10px]">Total Flows</CardDescription>
+                                                        <CardTitle className="text-lg">{masterDfdResults.overview_summary?.total_edges || 0}</CardTitle>
+                                                    </CardHeader>
+                                                </Card>
+                                                <Card>
+                                                    <CardHeader className="py-2 px-4">
+                                                        <CardDescription className="text-[10px]">Data Elements</CardDescription>
+                                                        <CardTitle className="text-lg">{masterDfdResults.overview_summary?.total_data_elements || 0}</CardTitle>
+                                                    </CardHeader>
+                                                </Card>
+                                                <Card>
+                                                    <CardHeader className="py-2 px-4">
+                                                        <CardDescription className="text-[10px]">Risks Found</CardDescription>
+                                                        <CardTitle className="text-lg text-destructive">{masterDfdResults.overview_summary?.total_risks || 0}</CardTitle>
+                                                    </CardHeader>
+                                                </Card>
+                                            </div>
+
+                                            {/* Risk Assessment & Unique Data Elements - Moved to Top */}
+                                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                                <Card>
+                                                    <CardHeader className="pb-3 border-b">
+                                                        <CardTitle className="text-sm flex items-center gap-2">
+                                                            <ShieldAlert className="w-4 h-4 text-destructive" />
+                                                            Risk Assessment
+                                                        </CardTitle>
+                                                    </CardHeader>
+                                                    <CardContent className="pt-4">
+                                                        <div className="space-y-2">
                                                         {Object.entries(masterDfdResults.overview_summary?.risk_severity_breakdown || {}).map(([severity, count]) => (
-                                                            <div key={severity} className="flex justify-between items-center p-2 rounded-md bg-muted/30">
-                                                                <span className="text-xs capitalize font-medium">{severity}</span>
-                                                                <Badge variant={severity === 'critical' || severity === 'high' ? 'destructive' : 'secondary'} className="text-[10px] h-4">
+                                                            <div 
+                                                                key={severity} 
+                                                                className="flex justify-between items-center p-3 rounded-lg border bg-card hover:bg-muted/30 transition-colors cursor-pointer"
+                                                                onClick={() => {
+                                                                    setSelectedRiskSeverity(severity);
+                                                                    setRiskDetailsOpen(true);
+                                                                }}
+                                                            >
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className={`w-2 h-2 rounded-full ${
+                                                                        severity === 'critical' ? 'bg-red-500' :
+                                                                        severity === 'high' ? 'bg-orange-500' :
+                                                                        severity === 'medium' ? 'bg-yellow-500' :
+                                                                        'bg-blue-500'
+                                                                    }`} />
+                                                                    <span className="text-sm capitalize font-medium">{severity}</span>
+                                                                </div>
+                                                                <Badge 
+                                                                    variant={severity === 'critical' || severity === 'high' ? 'destructive' : 'secondary'} 
+                                                                    className="text-xs px-2.5 py-0.5"
+                                                                >
                                                                     {count as number}
                                                                 </Badge>
                                                             </div>
                                                         ))}
                                                     </div>
-                                                </CardContent>
-                                            </Card>
+                                                    </CardContent>
+                                                </Card>
 
+                                                <Card>
+                                                    <CardHeader className="pb-3 border-b">
+                                                        <CardTitle className="text-sm flex items-center gap-2">
+                                                            <Database className="w-4 h-4 text-primary" />
+                                                            Unique Data Elements
+                                                        </CardTitle>
+                                                        <CardDescription className="text-xs mt-1">
+                                                            {masterDfdResults.overview_summary?.unique_data_elements_list?.length || 0} unique elements identified
+                                                        </CardDescription>
+                                                    </CardHeader>
+                                                    <CardContent className="pt-4 max-h-[220px] overflow-y-auto">
+                                                        <div className="flex flex-wrap gap-1.5">
+                                                            {masterDfdResults.overview_summary?.unique_data_elements_list?.map((el, i) => (
+                                                                <Badge 
+                                                                    key={i} 
+                                                                    variant="outline" 
+                                                                    className="text-xs font-normal px-2.5 py-1 hover:bg-primary/10 transition-colors cursor-default"
+                                                                >
+                                                                    {el}
+                                                                </Badge>
+                                                            ))}
+                                                        </div>
+                                                    </CardContent>
+                                                </Card>
+                                            </div>
+
+                                            {/* AI Executive Insights - Now Expandable */}
                                             <Card>
                                                 <CardHeader className="pb-3 border-b">
                                                     <CardTitle className="text-sm flex items-center gap-2">
-                                                        <Database className="w-4 h-4 text-primary" />
-                                                        Unique Data Elements
+                                                        <FileText className="w-4 h-4 text-primary" />
+                                                        AI Executive Insights
                                                     </CardTitle>
                                                 </CardHeader>
-                                                <CardContent className="pt-4 max-h-[200px] overflow-y-auto">
-                                                    <div className="flex flex-wrap gap-1">
-                                                        {masterDfdResults.overview_summary?.unique_data_elements_list.map((el, i) => (
-                                                            <Badge key={i} variant="outline" className="text-[10px] font-normal">
-                                                                {el}
-                                                            </Badge>
-                                                        ))}
-                                                    </div>
+                                                <CardContent className="pt-4">
+                                                    {!summaryExpanded ? (
+                                                        <div className="text-sm text-muted-foreground leading-relaxed">
+                                                            {(masterDfdResults.overview_summary?.ai_executive_summary || "").replace(/[#*_`]/g, '').substring(0, 300).trim()}...
+                                                            <button
+                                                                onClick={() => setSummaryExpanded(true)}
+                                                                className="ml-1 text-primary hover:underline font-semibold inline"
+                                                            >
+                                                                See more
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <MarkdownRenderer 
+                                                                content={masterDfdResults.overview_summary?.ai_executive_summary || ""}
+                                                                className="text-muted-foreground"
+                                                            />
+                                                            <button
+                                                                onClick={() => setSummaryExpanded(false)}
+                                                                className="mt-3 text-primary hover:underline font-semibold text-sm"
+                                                            >
+                                                                See less
+                                                            </button>
+                                                        </>
+                                                    )}
                                                 </CardContent>
                                             </Card>
                                         </div>
-                                    </div>
+                                    )}
+
+                                    {/* DFD Tab */}
+                                    {masterDfdSubTab === "dfd" && (masterDfdResults.master_html || masterDfdResults.dfd_json) && (
+                                        <Card className="overflow-hidden">
+                                            <CardHeader className="border-b py-3 px-4 flex flex-row items-center justify-between">
+                                                <CardTitle className="text-sm">Interactive Master DFD</CardTitle>
+                                                <div className="flex gap-2">
+                                                    <Badge variant="outline" className="text-[10px]">
+                                                        {masterDfdResults.overview_summary?.total_sessions} Sessions Merged
+                                                    </Badge>
+                                                    <Badge variant="outline" className="text-[10px] bg-primary/5">
+                                                        {masterDfdResults.overview_summary?.departments.join(", ")}
+                                                    </Badge>
+                                                </div>
+                                            </CardHeader>
+                                            <CardContent className="p-0 bg-white min-h-[500px] relative">
+                                                {masterDfdResults.master_html ? (
+                                                    <iframe
+                                                        srcDoc={masterDfdResults.master_html}
+                                                        className="w-full border-none"
+                                                        style={{ minHeight: '800px', height: '90vh' }}
+                                                        title="Master Data Flow Diagram"
+                                                        sandbox="allow-scripts allow-same-origin allow-modals allow-downloads allow-popups"
+                                                    />
+                                                ) : masterDfdResults.dfd_json ? (
+                                                    <DfdHtmlRenderer dfd={masterDfdResults.dfd_json} />
+                                                ) : null}
+                                            </CardContent>
+                                        </Card>
+                                    )}
                                 </div>
                             ) : (
                                 <Card className="border-dashed">
@@ -986,6 +1099,142 @@ export default function ProjectPage() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            {/* Risk Details Drawer */}
+            <Sheet open={riskDetailsOpen} onOpenChange={setRiskDetailsOpen}>
+                <SheetContent side="right" className="w-[500px] sm:w-[600px] overflow-y-auto">
+                    <SheetHeader>
+                        <SheetTitle className="flex items-center gap-2">
+                            <div className={`w-3 h-3 rounded-full ${
+                                selectedRiskSeverity === 'critical' ? 'bg-red-500' :
+                                selectedRiskSeverity === 'high' ? 'bg-orange-500' :
+                                selectedRiskSeverity === 'medium' ? 'bg-yellow-500' :
+                                'bg-blue-500'
+                            }`} />
+                            <span className="capitalize">{selectedRiskSeverity} Risks</span>
+                            <Badge 
+                                variant={selectedRiskSeverity === 'critical' || selectedRiskSeverity === 'high' ? 'destructive' : 'secondary'}
+                                className="ml-1"
+                            >
+                                {masterDfdResults?.overview_summary?.risk_severity_breakdown?.[selectedRiskSeverity || ''] || 0}
+                            </Badge>
+                        </SheetTitle>
+                        <SheetDescription>
+                            All identified risks at {selectedRiskSeverity} severity
+                        </SheetDescription>
+                    </SheetHeader>
+
+                    <Separator className="my-4" />
+
+                    <div className="space-y-4">
+                        {(() => {
+                            // Extract risks from master_kg nodes, grouped with their parent node info
+                            const risksWithNodes: Array<{
+                                risk: MasterKgRisk;
+                                nodeName: string;
+                                nodeType: string;
+                                nodeId: string;
+                                dataElements: string[];
+                            }> = [];
+
+                            (masterDfdResults?.master_kg?.nodes || []).forEach((node: MasterKgNode) => {
+                                (node.risks || []).forEach((risk: MasterKgRisk) => {
+                                    if (risk.severity?.toLowerCase() === selectedRiskSeverity?.toLowerCase()) {
+                                        risksWithNodes.push({
+                                            risk,
+                                            nodeName: node.name,
+                                            nodeType: node.type,
+                                            nodeId: node.id,
+                                            dataElements: node.data_elements || [],
+                                        });
+                                    }
+                                });
+                            });
+
+                            if (risksWithNodes.length === 0) {
+                                return (
+                                    <div className="flex flex-col items-center justify-center py-12 text-center">
+                                        <ShieldAlert className="w-10 h-10 text-muted-foreground/30 mb-3" />
+                                        <p className="text-sm text-muted-foreground">No detailed risk data available for this severity level.</p>
+                                    </div>
+                                );
+                            }
+
+                            return risksWithNodes.map((item, idx) => (
+                                <Card key={idx} className="border-l-4" style={{
+                                    borderLeftColor:
+                                        item.risk.severity === 'critical' ? '#ef4444' :
+                                        item.risk.severity === 'high' ? '#f97316' :
+                                        item.risk.severity === 'medium' ? '#eab308' :
+                                        '#3b82f6'
+                                }}>
+                                    <CardContent className="pt-4 space-y-3">
+                                        {/* Header */}
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div className="flex-1">
+                                                <span className="text-sm font-semibold">
+                                                    {item.risk.risk_name || `Risk #${idx + 1}`}
+                                                </span>
+                                            </div>
+                                            <Badge 
+                                                variant={item.risk.severity === 'critical' || item.risk.severity === 'high' ? 'destructive' : 'secondary'}
+                                                className="capitalize flex-shrink-0"
+                                            >
+                                                {item.risk.severity}
+                                            </Badge>
+                                        </div>
+
+                                        {/* Description */}
+                                        <div>
+                                            <p className="text-xs font-medium text-muted-foreground mb-1">Description</p>
+                                            <p className="text-sm leading-relaxed">{item.risk.description}</p>
+                                        </div>
+
+                                        {/* Affected Node */}
+                                        <div>
+                                            <p className="text-xs font-medium text-muted-foreground mb-2">Affected Node</p>
+                                            <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/40 border">
+                                                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                                    item.nodeType === 'system' ? 'bg-blue-500' :
+                                                    item.nodeType === 'actor' ? 'bg-green-500' :
+                                                    item.nodeType === 'external_entity' ? 'bg-purple-500' :
+                                                    'bg-gray-400'
+                                                }`} />
+                                                <span className="text-sm font-medium">{item.nodeName}</span>
+                                                <Badge variant="outline" className="text-[10px] capitalize">{item.nodeType.replace(/_/g, ' ')}</Badge>
+                                            </div>
+                                        </div>
+
+                                        {/* Data Elements at risk */}
+                                        {item.dataElements.length > 0 && (
+                                            <div>
+                                                <p className="text-xs font-medium text-muted-foreground mb-2">Data Elements at Risk ({item.dataElements.length})</p>
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {item.dataElements.map((el: string, i: number) => (
+                                                        <Badge key={i} variant="outline" className="text-xs">
+                                                            {el}
+                                                        </Badge>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Source */}
+                                        {item.risk.source && (
+                                            <div>
+                                                <p className="text-xs font-medium text-muted-foreground mb-1">Source</p>
+                                                <p className="text-xs text-muted-foreground bg-muted/30 rounded px-2 py-1 inline-block font-mono">
+                                                    {item.risk.source}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </CardContent>
+                                </Card>
+                            ));
+                        })()}
+                    </div>
+                </SheetContent>
+            </Sheet>
         </div>
     );
 }
