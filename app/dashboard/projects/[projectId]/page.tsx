@@ -179,6 +179,12 @@ export default function ProjectPage() {
     const [deletingVertical, setDeletingVertical] = useState(false);
     const verticalToDelete = project?.verticals.find((v) => v.id === deleteVerticalId);
 
+    // Bulk vertical delete
+    const [bulkSelectMode, setBulkSelectMode] = useState(false);
+    const [selectedVerticalIds, setSelectedVerticalIds] = useState<Set<string>>(new Set());
+    const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+    const [bulkDeleting, setBulkDeleting] = useState(false);
+
     // Members state
     const [members, setMembers] = useState<ProjectMember[]>([]);
     const [availableUsers, setAvailableUsers] = useState<AvailableUser[]>([]);
@@ -330,23 +336,86 @@ export default function ProjectPage() {
         }
     };
 
-    const handleAddDefaults = async () => {
-        setAddingDefaults(true);
-        const existing = project?.verticals.map((v) => v.name.toLowerCase()) || [];
-        const toAdd = defaultVerticals.filter(
-            (v) => !existing.includes(v.toLowerCase())
-        );
+    const toggleVerticalSelection = (verticalId: string) => {
+        setSelectedVerticalIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(verticalId)) next.delete(verticalId);
+            else next.add(verticalId);
+            return next;
+        });
+    };
 
-        for (const name of toAdd) {
-            await fetch("/api/verticals", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ projectId, name }),
-            });
+    const clearVerticalSelection = () => {
+        setSelectedVerticalIds(new Set());
+    };
+
+    const selectAllVerticals = () => {
+        const all = new Set((project?.verticals || []).map((v) => v.id));
+        setSelectedVerticalIds(all);
+    };
+
+    const confirmBulkDeleteVerticals = async () => {
+        if (bulkDeleting) return;
+        const ids = Array.from(selectedVerticalIds);
+        if (ids.length === 0) return;
+
+        setBulkDeleting(true);
+        const toastId = toast.loading(`Deleting ${ids.length} vertical(s)...`);
+        let deleted = 0;
+        let failed = 0;
+
+        for (const id of ids) {
+            try {
+                const res = await fetch(`/api/verticals/${id}`, { method: "DELETE" });
+                if (res.ok) {
+                    deleted += 1;
+                } else {
+                    failed += 1;
+                }
+                toast.loading(`Deleting verticals... (${deleted + failed}/${ids.length})`, { id: toastId });
+            } catch {
+                failed += 1;
+                toast.loading(`Deleting verticals... (${deleted + failed}/${ids.length})`, { id: toastId });
+            }
         }
-        toast.success(`Added ${toAdd.length} default verticals`);
+
+        if (failed === 0) {
+            toast.success(`Deleted ${deleted} vertical(s)`, { id: toastId });
+        } else {
+            toast.error(`Deleted ${deleted}. Failed ${failed}.`, { id: toastId });
+        }
+
+        setBulkDeleting(false);
+        setBulkDeleteDialogOpen(false);
+        setBulkSelectMode(false);
+        clearVerticalSelection();
         fetchProject();
-        setAddingDefaults(false);
+    };
+
+    const handleAddDefaults = async () => {
+        if (addingDefaults) return;
+        setAddingDefaults(true);
+        const toastId = toast.loading("Adding default verticals...");
+        try {
+            const existing = project?.verticals.map((v) => v.name.toLowerCase()) || [];
+            const toAdd = defaultVerticals.filter(
+                (v) => !existing.includes(v.toLowerCase())
+            );
+
+            for (const name of toAdd) {
+                await fetch("/api/verticals", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ projectId, name }),
+                });
+            }
+            toast.success(`Added ${toAdd.length} default verticals`, { id: toastId });
+            fetchProject();
+        } catch {
+            toast.error("Failed to add default verticals", { id: toastId });
+        } finally {
+            setAddingDefaults(false);
+        }
     };
 
     const handleVerticalToggle = (verticalId: string) => {
@@ -590,6 +659,50 @@ export default function ProjectPage() {
                             {project.verticals.length} business verticals defined
                         </p>
                         <div className="flex gap-2">
+                            {user?.role === "admin" && project.verticals.length > 0 && (
+                                <>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => {
+                                            if (bulkDeleting) return;
+                                            setBulkSelectMode((v) => {
+                                                const next = !v;
+                                                if (!next) clearVerticalSelection();
+                                                return next;
+                                            });
+                                        }}
+                                        disabled={bulkDeleting || deletingVertical}
+                                    >
+                                        {bulkSelectMode ? "Cancel Select" : "Select"}
+                                    </Button>
+
+                                    {bulkSelectMode && (
+                                        <>
+                                            <Button
+                                                variant="outline"
+                                                onClick={selectAllVerticals}
+                                                disabled={bulkDeleting || project.verticals.length === 0}
+                                            >
+                                                Select All
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                onClick={clearVerticalSelection}
+                                                disabled={bulkDeleting || selectedVerticalIds.size === 0}
+                                            >
+                                                Clear
+                                            </Button>
+                                            <Button
+                                                variant="destructive"
+                                                onClick={() => setBulkDeleteDialogOpen(true)}
+                                                disabled={bulkDeleting || selectedVerticalIds.size === 0}
+                                            >
+                                                {bulkDeleting ? "Deleting..." : `Delete Selected (${selectedVerticalIds.size})`}
+                                            </Button>
+                                        </>
+                                    )}
+                                </>
+                            )}
                             {project.verticals.length === 0 && (
                                 <Button variant="outline" onClick={handleAddDefaults} disabled={addingDefaults}>
                                     {addingDefaults ? "Adding..." : "Add Default Verticals"}
@@ -620,7 +733,7 @@ export default function ProjectPage() {
                                             />
                                         </div>
                                         <div className="space-y-2">
-                                            <Label>Description</Label>
+                                            <Label>Description *</Label>
                                             <Textarea
                                                 placeholder="Brief description of this vertical's data handling..."
                                                 value={form.description}
@@ -674,7 +787,7 @@ export default function ProjectPage() {
                                     or add them manually.
                                 </p>
                                 <div className="flex gap-2">
-                                    <Button variant="outline" onClick={handleAddDefaults}>
+                                    <Button variant="outline" onClick={handleAddDefaults} disabled={addingDefaults}>
                                         Use Default Template
                                     </Button>
                                     <Button onClick={() => setDialogOpen(true)}>Add Custom Vertical</Button>
@@ -685,9 +798,67 @@ export default function ProjectPage() {
                         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                             {project.verticals.map((vertical) => {
                                 const status = statusConfig[vertical.assessmentStatus] || statusConfig.not_started;
+                                const isSelected = selectedVerticalIds.has(vertical.id);
                                 return (
-                                    <Link key={vertical.id} href={`/dashboard/projects/${projectId}/verticals/${vertical.id}`}>
-                                        <Card className="hover:border-primary/50 transition-colors cursor-pointer group h-full">
+                                    bulkSelectMode ? (
+                                        <div
+                                            key={vertical.id}
+                                            className="relative"
+                                            onClick={() => toggleVerticalSelection(vertical.id)}
+                                        >
+                                            <div className="absolute left-2 top-2 z-20" onClick={(e) => e.stopPropagation()}>
+                                                <Checkbox
+                                                    checked={isSelected}
+                                                    onCheckedChange={() => toggleVerticalSelection(vertical.id)}
+                                                    disabled={bulkDeleting}
+                                                />
+                                            </div>
+                                            <Card
+                                                className={`transition-colors cursor-pointer group h-full ${
+                                                    isSelected ? "border-primary/70 ring-2 ring-primary/20" : "hover:border-primary/50"
+                                                }`}
+                                            >
+                                                <CardHeader className="pb-3">
+                                                    <div className="flex items-start justify-between gap-2">
+                                                        <CardTitle className="text-base group-hover:text-primary transition-colors">
+                                                            {vertical.name}
+                                                        </CardTitle>
+                                                    </div>
+                                                    {vertical.headName && (
+                                                        <CardDescription className="text-xs">
+                                                            {vertical.headName}{vertical.headRole ? ` · ${vertical.headRole}` : ""}
+                                                        </CardDescription>
+                                                    )}
+                                                </CardHeader>
+                                                <CardContent className="pt-0 space-y-3">
+                                                    <div className="flex items-center justify-between text-xs">
+                                                        <Badge
+                                                            variant="outline"
+                                                            className={`${status.color}/10 text-xs border-current`}
+                                                        >
+                                                            {status.label}
+                                                        </Badge>
+                                                        <span className="text-muted-foreground">
+                                                            {vertical._count.sessions} / {vertical.sessionRunLimit} sessions
+                                                        </span>
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                                                            <div
+                                                                className={`h-full ${vertical._count.sessions >= vertical.sessionRunLimit ? 'bg-destructive' : 'bg-primary'} rounded-full transition-all duration-500`}
+                                                                style={{ width: `${Math.min((vertical._count.sessions / (vertical.sessionRunLimit || 1)) * 100, 100)}%` }}
+                                                            />
+                                                        </div>
+                                                        <div className="flex justify-end pt-1 text-[10px] text-muted-foreground">
+                                                            {Math.max(0, vertical.sessionRunLimit - vertical._count.sessions)} assessments remaining
+                                                        </div>
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+                                        </div>
+                                    ) : (
+                                        <Link key={vertical.id} href={`/dashboard/projects/${projectId}/verticals/${vertical.id}`}>
+                                            <Card className="hover:border-primary/50 transition-colors cursor-pointer group h-full">
                                             <CardHeader className="pb-3">
                                                 <div className="flex items-start justify-between gap-2">
                                                     <CardTitle className="text-base group-hover:text-primary transition-colors">
@@ -723,9 +894,9 @@ export default function ProjectPage() {
                                                     >
                                                         {status.label}
                                                     </Badge>
-                                                    <span className="text-muted-foreground">
+                                                    {/* <span className="text-muted-foreground">
                                                         {vertical._count.sessions} / {vertical.sessionRunLimit} sessions
-                                                    </span>
+                                                    </span> */}
                                                 </div>
                                                 {/* Usage Progress bar */}
                                                 <div className="space-y-1">
@@ -735,18 +906,40 @@ export default function ProjectPage() {
                                                             style={{ width: `${Math.min((vertical._count.sessions / (vertical.sessionRunLimit || 1)) * 100, 100)}%` }}
                                                         />
                                                     </div>
-                                                    <div className="flex justify-end pt-1 text-[10px] text-muted-foreground">
+                                                    {/* <div className="flex justify-end pt-1 text-[10px] text-muted-foreground">
                                                         {Math.max(0, vertical.sessionRunLimit - vertical._count.sessions)} assessments remaining
-                                                    </div>
+                                                    </div> */}
                                                 </div>
                                             </CardContent>
-                                        </Card>
-                                    </Link>
+                                            </Card>
+                                        </Link>
+                                    )
                                 );
                             })}
                         </div>
                     )}
                 </TabsContent>
+
+                <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Delete selected verticals?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                This will permanently delete {selectedVerticalIds.size} vertical(s) and their associated data. This action cannot be undone.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel disabled={bulkDeleting}>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={confirmBulkDeleteVerticals}
+                                disabled={bulkDeleting || selectedVerticalIds.size === 0}
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                                {bulkDeleting ? "Deleting..." : "Delete"}
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
 
                 <TabsContent value="master-dfd" className="space-y-4">
                     <div className="grid gap-6 md:grid-cols-12">

@@ -2444,7 +2444,7 @@ export default function VerticalWorkspacePage() {
 
             {/* Add Notes Dialog */}
             < Dialog open={notesDialogOpen} onOpenChange={setNotesDialogOpen} >
-                <DialogContent className="max-w-2xl">
+                <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
                     <DialogHeader>
                         <DialogTitle>
                             Add Notes — Session #{activeSession?.sessionNumber}
@@ -2453,7 +2453,7 @@ export default function VerticalWorkspacePage() {
                             Add more context, findings, or follow-up notes. This will be appended to the existing notes and the version will be bumped.
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-4 py-4">
+                    <div className="space-y-4 py-4 overflow-y-auto flex-1">
                         {activeSession?.rawTextNotes && (
                             <div className="bg-muted/30 rounded-lg p-3 max-h-32 overflow-y-auto">
                                 <p className="text-xs font-medium text-muted-foreground mb-1">Existing notes preview:</p>
@@ -2474,7 +2474,7 @@ export default function VerticalWorkspacePage() {
                             />
                         </div>
                     </div>
-                    <DialogFooter>
+                    <DialogFooter className="border-t pt-4 mt-2">
                         <Button variant="outline" onClick={() => setNotesDialogOpen(false)}>
                             Cancel
                         </Button>

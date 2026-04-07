@@ -56,6 +56,17 @@ export async function POST(request: Request) {
         // Verify project belongs to user's org
         await requireProjectOrgAccess(user, projectId);
 
+        // Idempotency: avoid creating duplicate verticals for the same project/name
+        const existing = await prisma.vertical.findFirst({
+            where: {
+                projectId,
+                name: { equals: name, mode: "insensitive" },
+            },
+        });
+        if (existing) {
+            return successResponse(existing, 200);
+        }
+
         // Get next sort order
         const maxSort = await prisma.vertical.aggregate({
             where: { projectId },
