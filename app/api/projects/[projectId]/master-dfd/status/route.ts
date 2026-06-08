@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser, unauthorizedResponse } from "@/lib/auth/helpers";
 import { formatError } from "@/lib/utils";
 
-const PIPELINE_API = process.env.DFD_API_BASE_URL || "http://3.237.70.242:8000";
+const PIPELINE_API = process.env.DFD_API_BASE_URL || "http://54.242.155.97:8000";
 
 export async function GET(
     request: Request,
