@@ -12,6 +12,9 @@
     "postinstall": "prisma generate",
     "start": "next start"
   },
+  "engines": {
+    "node": "22"
+  },
   "prisma": {
     "seed": "npx ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
   },
