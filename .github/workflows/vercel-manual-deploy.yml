@@ -14,8 +14,7 @@ jobs:
     name: Deploy Frontend to Vercel
     runs-on: ubuntu-latest
 
-    # Manual only, and only when triggered from deploy/vercel branch
-    if: github.ref_name == 'deploy/vercel'
+    # Only run on main branch push or manual dispatch
 
     steps:
       - name: Checkout code
