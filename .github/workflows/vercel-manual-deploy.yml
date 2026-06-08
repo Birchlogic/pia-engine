@@ -70,6 +70,6 @@ jobs:
           SUPER_ADMIN_JWT_SECRET: ${{ secrets.SUPER_ADMIN_JWT_SECRET }}
           PAYLOAD_TOKEN: ${{ secrets.PAYLOAD_TOKEN }}
         run: |
-          pnpm dlx vercel pull --yes --environment=production
-          pnpm dlx vercel build --prod
-          pnpm dlx vercel deploy --prebuilt --prod
+          pnpm dlx vercel pull --yes --environment=production --token="${VERCEL_TOKEN}"
+          pnpm dlx vercel build --prod --token="${VERCEL_TOKEN}"
+          pnpm dlx vercel deploy --prebuilt --prod --token="${VERCEL_TOKEN}"
