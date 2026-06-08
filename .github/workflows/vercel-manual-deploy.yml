@@ -70,8 +70,6 @@ jobs:
           SUPER_ADMIN_JWT_SECRET: ${{ secrets.SUPER_ADMIN_JWT_SECRET }}
           PAYLOAD_TOKEN: ${{ secrets.PAYLOAD_TOKEN }}
         run: |
-          echo "DEBUG: VERCEL_TOKEN length: ${#VERCEL_TOKEN}"
-          echo "DEBUG: VERCEL_TOKEN first/last 10 chars: ${VERCEL_TOKEN:0:10}...${VERCEL_TOKEN: -10}"
-          pnpm dlx vercel pull --yes --environment=production --token=$VERCEL_TOKEN
-          pnpm dlx vercel build --prod --token=$VERCEL_TOKEN
-          pnpm dlx vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN
+          pnpm dlx vercel pull --yes --environment=production
+          pnpm dlx vercel build --prod
+          pnpm dlx vercel deploy --prebuilt --prod
