@@ -74,6 +74,13 @@ jobs:
           SUPER_ADMIN_JWT_SECRET: ${{ secrets.SUPER_ADMIN_JWT_SECRET }}
           PAYLOAD_TOKEN: ${{ secrets.PAYLOAD_TOKEN }}
         run: |
+          echo "=== Debug: Environment Variables ==="
+          echo "NEXTAUTH_SECRET length: ${#NEXTAUTH_SECRET}"
+          echo "NEXTAUTH_URL: ${NEXTAUTH_URL}"
+          echo "DATABASE_URL length: ${#DATABASE_URL}"
+          echo "NEXT_PUBLIC_SUPABASE_URL length: ${#NEXT_PUBLIC_SUPABASE_URL}"
+          echo "=== End Debug ==="
+          
           pnpm dlx vercel pull --yes --environment=production
           pnpm dlx vercel build --prod
           pnpm dlx vercel deploy --prebuilt --prod
