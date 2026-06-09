@@ -13,34 +13,54 @@ export const authOptions: NextAuthOptions = {
                 password: { label: "Password", type: "password" },
             },
             async authorize(credentials) {
+                console.log("[Auth] Authorize - Starting authentication");
+                console.log("[Auth] Authorize - Email provided:", credentials?.email);
+                console.log("[Auth] Authorize - DATABASE_URL exists:", !!process.env.DATABASE_URL);
+                console.log("[Auth] Authorize - DATABASE_URL length:", process.env.DATABASE_URL?.length || 0);
+                
                 if (!credentials?.email || !credentials?.password) {
+                    console.log("[Auth] Authorize - Missing credentials");
                     throw new Error("Email and password are required");
                 }
 
-                const user = await prisma.user.findUnique({
-                    where: { email: credentials.email },
-                });
+                try {
+                    console.log("[Auth] Authorize - Looking up user in database");
+                    const user = await prisma.user.findUnique({
+                        where: { email: credentials.email },
+                    });
+                    console.log("[Auth] Authorize - User found:", !!user);
 
-                if (!user) {
-                    throw new Error("No user found with this email");
+                    if (!user) {
+                        console.log("[Auth] Authorize - No user found with email:", credentials.email);
+                        throw new Error("No user found with this email");
+                    }
+
+                    if (!user.isActive) {
+                        console.log("[Auth] Authorize - User account deactivated");
+                        throw new Error("Account has been deactivated. Contact your administrator.");
+                    }
+
+                    console.log("[Auth] Authorize - Comparing password");
+                    const isValid = await compare(credentials.password, user.password);
+                    console.log("[Auth] Authorize - Password valid:", isValid);
+                    
+                    if (!isValid) {
+                        console.log("[Auth] Authorize - Invalid password");
+                        throw new Error("Invalid password");
+                    }
+
+                    console.log("[Auth] Authorize - Authentication successful for:", user.email);
+                    return {
+                        id: user.id,
+                        email: user.email,
+                        name: user.name,
+                        role: user.role,
+                        orgId: user.orgId,
+                    };
+                } catch (error) {
+                    console.error("[Auth] Authorize - Database error:", error);
+                    throw error;
                 }
-
-                if (!user.isActive) {
-                    throw new Error("Account has been deactivated. Contact your administrator.");
-                }
-
-                const isValid = await compare(credentials.password, user.password);
-                if (!isValid) {
-                    throw new Error("Invalid password");
-                }
-
-                return {
-                    id: user.id,
-                    email: user.email,
-                    name: user.name,
-                    role: user.role,
-                    orgId: user.orgId,
-                };
             },
         }),
     ],
@@ -97,5 +117,10 @@ export const authOptions: NextAuthOptions = {
     pages: {
         signIn: "/login",
     },
-    secret: process.env.NEXTAUTH_SECRET,
+    secret: (() => {
+        console.log("[Auth] NEXTAUTH_SECRET exists:", !!process.env.NEXTAUTH_SECRET);
+        console.log("[Auth] NEXTAUTH_SECRET length:", process.env.NEXTAUTH_SECRET?.length || 0);
+        console.log("[Auth] NEXTAUTH_URL:", process.env.NEXTAUTH_URL);
+        return process.env.NEXTAUTH_SECRET;
+    })(),
 };
