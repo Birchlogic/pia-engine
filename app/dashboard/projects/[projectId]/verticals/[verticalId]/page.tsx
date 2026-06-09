@@ -212,6 +212,7 @@ export default function VerticalWorkspacePage() {
 
     // Refs for export
     const iframeRef = useRef<HTMLIFrameElement>(null);
+    const dfdRendererRef = useRef<any>(null);
 
     // 3-JSON DFD structures from pipeline
     const [knowledgeGraph, setKnowledgeGraph] = useState<KnowledgeGraph | null>(null);
