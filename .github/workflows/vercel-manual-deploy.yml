@@ -1,13 +1,13 @@
 name: Manual Deploy to Vercel
 
-# on:
-#   push:
-#     branches: [main]
-#   workflow_dispatch:
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
 
-# permissions:
-#   id-token: write
-#   contents: read
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
   deploy:

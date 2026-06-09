@@ -150,7 +150,7 @@ export default function SuperAdminDashboard() {
     const [llmProviders, setLlmProviders] = useState<LlmProviderConfig[]>([]);
     const [llmLoading, setLlmLoading] = useState(false);
     const [showAddProvider, setShowAddProvider] = useState(false);
-    const [providerForm, setProviderForm] = useState({ type: "CLAUDE", model: "", apiKey: "" });
+    const [providerForm, setProviderForm] = useState({ type: "OPENROUTER", model: "", apiKey: "" });
 
     // Activity Logs State
     const [activitySummary, setActivitySummary] = useState<any[]>([]);
@@ -430,7 +430,7 @@ export default function SuperAdminDashboard() {
             }
             toast.success("Provider added successfully");
             setShowAddProvider(false);
-            setProviderForm({ type: "CLAUDE", model: "", apiKey: "" });
+            setProviderForm({ type: "OPENROUTER", model: "", apiKey: "" });
             loadLlmProviders();
         } catch {
             toast.error("Failed to add provider");
@@ -1266,7 +1266,7 @@ export default function SuperAdminDashboard() {
                                 <Label htmlFor="modelName">Model Name *</Label>
                                 <Input
                                     id="modelName"
-                                    placeholder={providerForm.type === "CLAUDE" ? "claude-sonnet-4-20250514" : providerForm.type === "OPENAI" ? "gpt-4o" : "anthropic/claude-sonnet-4-20250514"}
+                                    placeholder={providerForm.type === "OPENROUTER" ? "anthropic/claude-sonnet-4-20250514" : providerForm.type === "OPENAI" ? "gpt-4o" : "claude-sonnet-4-20250514"}
                                     value={providerForm.model}
                                     onChange={(e) => setProviderForm({ ...providerForm, model: e.target.value })}
                                     required

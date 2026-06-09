@@ -13,34 +13,51 @@ export const authOptions: NextAuthOptions = {
                 password: { label: "Password", type: "password" },
             },
             async authorize(credentials) {
+                console.log("[Auth Debug] Starting authorization for:", credentials?.email);
+                
                 if (!credentials?.email || !credentials?.password) {
+                    console.log("[Auth Debug] Missing credentials");
                     throw new Error("Email and password are required");
                 }
 
-                const user = await prisma.user.findUnique({
-                    where: { email: credentials.email },
-                });
+                try {
+                    console.log("[Auth Debug] Looking up user in database");
+                    const user = await prisma.user.findUnique({
+                        where: { email: credentials.email },
+                    });
+                    console.log("[Auth Debug] User found:", !!user);
 
-                if (!user) {
-                    throw new Error("No user found with this email");
+                    if (!user) {
+                        console.log("[Auth Debug] No user found with email:", credentials.email);
+                        throw new Error("No user found with this email");
+                    }
+
+                    if (!user.isActive) {
+                        console.log("[Auth Debug] User account deactivated");
+                        throw new Error("Account has been deactivated. Contact your administrator.");
+                    }
+
+                    console.log("[Auth Debug] Comparing password");
+                    const isValid = await compare(credentials.password, user.password);
+                    console.log("[Auth Debug] Password valid:", isValid);
+                    
+                    if (!isValid) {
+                        console.log("[Auth Debug] Invalid password");
+                        throw new Error("Invalid password");
+                    }
+
+                    console.log("[Auth Debug] Authentication successful");
+                    return {
+                        id: user.id,
+                        email: user.email,
+                        name: user.name,
+                        role: user.role,
+                        orgId: user.orgId,
+                    };
+                } catch (error) {
+                    console.error("[Auth Debug] Authorization error:", error);
+                    throw error;
                 }
-
-                if (!user.isActive) {
-                    throw new Error("Account has been deactivated. Contact your administrator.");
-                }
-
-                const isValid = await compare(credentials.password, user.password);
-                if (!isValid) {
-                    throw new Error("Invalid password");
-                }
-
-                return {
-                    id: user.id,
-                    email: user.email,
-                    name: user.name,
-                    role: user.role,
-                    orgId: user.orgId,
-                };
             },
         }),
     ],
