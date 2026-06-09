@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,15 @@ export function LoginForm() {
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
+    const [debugInfo, setDebugInfo] = useState<any>({});
+
+    useEffect(() => {
+        // Fetch environment variables from server-side
+        fetch('/api/debug/env')
+            .then(res => res.json())
+            .then(data => setDebugInfo(data))
+            .catch(err => console.error('Failed to fetch debug info:', err));
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -96,6 +105,16 @@ export function LoginForm() {
                             Demo: admin@kaizen.ai / password123
                         </p> */}
                     </form>
+                    
+                    {/* Debug Information */}
+                    {Object.keys(debugInfo).length > 0 && (
+                        <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                            <h4 className="text-sm font-semibold text-yellow-800 mb-2">Debug Information:</h4>
+                            <pre className="text-xs text-yellow-700 whitespace-pre-wrap break-all">
+                                {JSON.stringify(debugInfo, null, 2)}
+                            </pre>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
         </div>
