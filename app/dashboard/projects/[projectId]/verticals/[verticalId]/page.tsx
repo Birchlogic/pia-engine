@@ -2217,6 +2217,16 @@ export default function VerticalWorkspacePage() {
                         <div className="space-y-3">
                             <Skeleton className="h-64 w-full" />
                         </div>
+                    ) : dfdHtml ? (
+                        <div className="w-full relative min-h-[500px] min-w-0">
+                            <iframe
+                                ref={iframeRef}
+                                srcDoc={dfdHtml}
+                                className="w-full border-none min-h-[600px] h-[70vh] rounded-lg"
+                                title="DFD Viewer"
+                                sandbox="allow-scripts allow-same-origin"
+                            />
+                        </div>
                     ) : dfdData ? (
                         <div className="w-full relative min-h-[500px] min-w-0 overflow-x-auto">
                             <DfdHtmlRenderer dfd={dfdData} ref={dfdRendererRef} />

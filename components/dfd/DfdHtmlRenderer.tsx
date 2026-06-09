@@ -803,8 +803,11 @@ export const DfdHtmlRenderer = React.forwardRef<{}, { dfd: DfdData | null }>(
         </div>
 
         {/* Canvas container */}
-        <Card className="overflow-hidden border-border/60">
-          <div ref={containerRef} className="overflow-x-auto bg-[#0f172a] rounded-lg">
+        <Card className="border-border/60">
+          <div
+            ref={containerRef}
+            className="overflow-auto bg-[#0f172a] rounded-lg max-h-[70vh] min-h-[520px]"
+          >
             <canvas ref={canvasRef} className="block" />
           </div>
         </Card>
