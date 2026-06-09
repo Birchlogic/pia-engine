@@ -37,6 +37,9 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
+      - name: Unlock SST (if locked)
+        run: pnpm exec sst unlock --stage production || echo "No lock found or unlocked successfully"
+      
       - name: Deploy with SST
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
