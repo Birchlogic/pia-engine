@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -201,6 +201,9 @@ export default function VerticalWorkspacePage() {
     const [previewing, setPreviewing] = useState(false);
     const [previewFullscreen, setPreviewFullscreen] = useState(false);
     const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [regeneratingDfd, setRegeneratingDfd] = useState(false);
+    const [exportingPdf, setExportingPdf] = useState(false);
+    const [pipelineSessionId, setPipelineSessionId] = useState<string | null>(null);
     const [editorSubTab, setEditorSubTab] = useState<string>("editor");
     const [editedNodes, setEditedNodes] = useState<any[]>([]);
     const [editedEdges, setEditedEdges] = useState<any[]>([]);
@@ -221,6 +224,15 @@ export default function VerticalWorkspacePage() {
     const [jsonEditorOpen, setJsonEditorOpen] = useState(false);
     const [downloadingFiles, setDownloadingFiles] = useState<Set<string>>(new Set());
     const [activeTab, setActiveTab] = useState("sessions");
+
+    const hasGeneratedDfd = useMemo(() => {
+        const htmlOk = typeof dfdHtml === "string" && dfdHtml.trim().length >= 200;
+        const dfdNodes = (dfdData as any)?.nodes;
+        const dfdOk = Array.isArray(dfdNodes) && dfdNodes.length > 0;
+        const kgNodes = knowledgeGraph?.nodes;
+        const kgOk = Array.isArray(kgNodes) && kgNodes.length > 0;
+        return htmlOk || dfdOk || kgOk;
+    }, [dfdHtml, dfdData, knowledgeGraph]);
 
     const handleTabChange = (val: string) => {
         setActiveTab(val);
@@ -296,6 +308,9 @@ export default function VerticalWorkspacePage() {
             const res = await fetch(`/api/verticals/${verticalId}/pipeline/results`);
             if (res.ok) {
                 const data = await res.json();
+                if (data?.session_id && typeof data.session_id === "string") {
+                    setPipelineSessionId(data.session_id);
+                }
                 if (data?.status === "not_ready") {
                     return;
                 }
@@ -398,6 +413,10 @@ export default function VerticalWorkspacePage() {
                 const data = await res.json();
                 const status = data.status || "not_started";
                 setPipelineStatus(data);
+
+                if (data?.session_id && typeof data.session_id === "string") {
+                    setPipelineSessionId(data.session_id);
+                }
 
                 if (status === "completed" && data.progress_percent === 100) {
                     fetchPipelineResults();
@@ -550,6 +569,51 @@ export default function VerticalWorkspacePage() {
             fetchVertical();
         } else {
             toast.error("Failed to finalize session");
+        }
+    };
+
+    const handleRegenerateDfd = async () => {
+        if (regeneratingDfd) return;
+        setRegeneratingDfd(true);
+        const toastId = toast.loading("Regenerating DFD...", { id: "dfd-regen" });
+        try {
+            const sessionId = pipelineSessionId || verticalId;
+            console.log("[UI] Regenerate DFD", { sessionId, pipelineSessionId, verticalId });
+
+            const controller = new AbortController();
+            const timeoutMs = 130_000;
+            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+            const res = await fetch(`/api/dfd/regenerate/${sessionId}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                signal: controller.signal,
+            });
+
+            clearTimeout(timeoutId);
+
+            const contentType = res.headers.get("content-type") || "";
+            const data = contentType.includes("application/json")
+                ? await res.json().catch(() => ({}))
+                : await res.text().catch(() => "");
+
+            if (!res.ok) {
+                const msg = typeof data === "string"
+                    ? data
+                    : (data as any)?.error || (data as any)?.detail || "Failed to regenerate DFD";
+                toast.error(msg, { id: toastId });
+                return;
+            }
+            toast.success("DFD regenerated successfully", { id: toastId });
+            await fetchPipelineResults();
+        } catch (e) {
+            const msg = e instanceof Error && e.name === "AbortError"
+                ? "Regenerate DFD timed out. Please try again."
+                : "Network error — failed to regenerate DFD";
+            toast.error(msg, { id: toastId });
+        } finally {
+            setRegeneratingDfd(false);
         }
     };
 
@@ -762,6 +826,25 @@ export default function VerticalWorkspacePage() {
         }
     };
 
+    const pickBestSvg = (doc: Document) => {
+        const svgs = Array.from(doc.querySelectorAll("svg"));
+        if (svgs.length === 0) return null;
+
+        let best: SVGElement | null = null;
+        let bestArea = 0;
+
+        for (const svg of svgs) {
+            const rect = svg.getBoundingClientRect();
+            const area = Math.max(0, rect.width) * Math.max(0, rect.height);
+            if (area > bestArea) {
+                bestArea = area;
+                best = svg;
+            }
+        }
+
+        return best;
+    };
+
     const handleExportPng = () => {
         if (iframeRef.current) {
             try {
@@ -771,7 +854,7 @@ export default function VerticalWorkspacePage() {
                     return;
                 }
 
-                const svgEl = doc.querySelector("svg");
+                const svgEl = pickBestSvg(doc);
                 const canvasEl = doc.querySelector("canvas") as HTMLCanvasElement | null;
 
                 const fileName = `dfd-${vertical?.name || verticalId}.png`;
@@ -907,16 +990,45 @@ export default function VerticalWorkspacePage() {
         }
     };
 
-    const handleExportPdf = () => {
-        if (iframeRef.current) {
+    const handleExportPdf = async () => {
+        if (exportingPdf) return;
+        setExportingPdf(true);
+
+        try {
             try {
-                const doc = iframeRef.current.contentDocument;
-                if (!doc) {
-                    toast.error("Unable to access diagram document for export");
+                const sessionId = pipelineSessionId || verticalId;
+                const res = await fetch(`/api/dfd/pdf/${sessionId}`, {
+                    method: "GET",
+                    credentials: "include",
+                });
+
+                if (res.ok) {
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `dfd-${vertical?.name || sessionId}.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    toast.success("Downloaded PDF");
+                    logExportActivity("PDF");
                     return;
                 }
+            } catch {
+                // fall through to legacy export
+            }
 
-                const svgEl = doc.querySelector("svg");
+            if (iframeRef.current) {
+                try {
+                    const doc = iframeRef.current.contentDocument;
+                    if (!doc) {
+                        await handleExportPdfFallback();
+                        return;
+                    }
+
+                const svgEl = pickBestSvg(doc);
                 const canvasEl = doc.querySelector("canvas") as HTMLCanvasElement | null;
 
                 let bodyHtml = "";
@@ -986,11 +1098,16 @@ export default function VerticalWorkspacePage() {
                 if (w) w.onafterprint = () => cleanup();
                 setTimeout(cleanup, 10_000);
                 logExportActivity("PDF");
-            } catch {
-                toast.error("PDF export failed — browser blocked printing from the embedded diagram.");
+                    return;
+                } catch {
+                    await handleExportPdfFallback();
+                    return;
+                }
             }
-        } else {
-            toast.error("No DFD available to export");
+
+            await handleExportPdfFallback();
+        } finally {
+            setExportingPdf(false);
         }
     };
 
@@ -2217,8 +2334,28 @@ export default function VerticalWorkspacePage() {
                         <div className="space-y-3">
                             <Skeleton className="h-64 w-full" />
                         </div>
-                    ) : dfdHtml ? (
+                    ) : hasGeneratedDfd && dfdHtml ? (
                         <div className="w-full relative min-h-[500px] min-w-0">
+                            <div className="flex justify-end mb-3 gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    type="button"
+                                    onClick={handleExportPdf}
+                                    disabled={exportingPdf}
+                                >
+                                    {exportingPdf ? "Exporting..." : "Export PDF"}
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    type="button"
+                                    onClick={handleRegenerateDfd}
+                                    disabled={regeneratingDfd}
+                                >
+                                    {regeneratingDfd ? "Regenerating..." : "Regenerate DFD"}
+                                </Button>
+                            </div>
                             <iframe
                                 ref={iframeRef}
                                 srcDoc={dfdHtml}
@@ -2227,8 +2364,28 @@ export default function VerticalWorkspacePage() {
                                 sandbox="allow-scripts allow-same-origin"
                             />
                         </div>
-                    ) : dfdData ? (
+                    ) : hasGeneratedDfd && dfdData ? (
                         <div className="w-full relative min-h-[500px] min-w-0 overflow-x-auto">
+                            <div className="flex justify-end mb-3 gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    type="button"
+                                    onClick={handleExportPdf}
+                                    disabled={exportingPdf}
+                                >
+                                    {exportingPdf ? "Exporting..." : "Export PDF"}
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    type="button"
+                                    onClick={handleRegenerateDfd}
+                                    disabled={regeneratingDfd}
+                                >
+                                    {regeneratingDfd ? "Regenerating..." : "Regenerate DFD"}
+                                </Button>
+                            </div>
                             <DfdHtmlRenderer dfd={dfdData} ref={dfdRendererRef} />
                         </div>
                     ) : (
@@ -2238,6 +2395,17 @@ export default function VerticalWorkspacePage() {
                             <p className="text-sm text-slate-500 mt-1 max-w-sm text-center">
                                 A DFD will be automatically generated once the Schema mapping completes.
                             </p>
+                            <div className="mt-6">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    type="button"
+                                    onClick={handleRegenerateDfd}
+                                    disabled={regeneratingDfd}
+                                >
+                                    {regeneratingDfd ? "Generating..." : "Generate DFD"}
+                                </Button>
+                            </div>
                         </Card>
                     )}
                 </TabsContent>
