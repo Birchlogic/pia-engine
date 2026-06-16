@@ -203,6 +203,7 @@ export default function VerticalWorkspacePage() {
     const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [regeneratingDfd, setRegeneratingDfd] = useState(false);
     const [exportingPdf, setExportingPdf] = useState(false);
+    const [exportingPng, setExportingPng] = useState(false);
     const [pipelineSessionId, setPipelineSessionId] = useState<string | null>(null);
     const [editorSubTab, setEditorSubTab] = useState<string>("editor");
     const [editedNodes, setEditedNodes] = useState<any[]>([]);
@@ -845,120 +846,7 @@ export default function VerticalWorkspacePage() {
         return best;
     };
 
-    const handleExportPng = () => {
-        if (iframeRef.current) {
-            try {
-                const doc = iframeRef.current.contentDocument;
-                if (!doc) {
-                    toast.error("Unable to access diagram document for export");
-                    return;
-                }
-
-                const svgEl = pickBestSvg(doc);
-                const canvasEl = doc.querySelector("canvas") as HTMLCanvasElement | null;
-
-                const fileName = `dfd-${vertical?.name || verticalId}.png`;
-
-                if (canvasEl) {
-                    const w = Math.max(1, canvasEl.width || canvasEl.clientWidth || 1);
-                    const h = Math.max(1, canvasEl.height || canvasEl.clientHeight || 1);
-
-                    const outCanvas = document.createElement("canvas");
-                    outCanvas.width = w;
-                    outCanvas.height = h;
-                    const ctx = outCanvas.getContext("2d");
-                    if (!ctx) {
-                        toast.error("Failed to export PNG");
-                        return;
-                    }
-
-                    ctx.fillStyle = "#ffffff";
-                    ctx.fillRect(0, 0, w, h);
-                    ctx.drawImage(canvasEl, 0, 0);
-
-                    outCanvas.toBlob((blob) => {
-                        if (!blob) {
-                            toast.error("Failed to export PNG");
-                            return;
-                        }
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement("a");
-                        a.href = url;
-                        a.download = fileName;
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        URL.revokeObjectURL(url);
-                        logExportActivity("PNG");
-                    }, "image/png");
-                    return;
-                }
-
-                if (!svgEl) {
-                    toast.error("No SVG/canvas diagram found to export");
-                    return;
-                }
-
-                const serializer = new XMLSerializer();
-                let svgText = serializer.serializeToString(svgEl);
-                if (!svgText.includes("xmlns=\"http://www.w3.org/2000/svg\"")) {
-                    svgText = svgText.replace("<svg", "<svg xmlns=\"http://www.w3.org/2000/svg\"");
-                }
-
-                const svgBlob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
-                const url = URL.createObjectURL(svgBlob);
-                const img = new Image();
-
-                img.onload = () => {
-                    const rect = svgEl.getBoundingClientRect();
-                    const w = Math.max(1, Math.round(rect.width));
-                    const h = Math.max(1, Math.round(rect.height));
-
-                    const outCanvas = document.createElement("canvas");
-                    outCanvas.width = w;
-                    outCanvas.height = h;
-                    const ctx = outCanvas.getContext("2d");
-                    if (!ctx) {
-                        URL.revokeObjectURL(url);
-                        toast.error("Failed to export PNG");
-                        return;
-                    }
-                    ctx.fillStyle = "#ffffff";
-                    ctx.fillRect(0, 0, w, h);
-                    ctx.drawImage(img, 0, 0, w, h);
-
-                    outCanvas.toBlob((blob) => {
-                        URL.revokeObjectURL(url);
-                        if (!blob) {
-                            toast.error("Failed to export PNG");
-                            return;
-                        }
-                        const outUrl = URL.createObjectURL(blob);
-                        const a = document.createElement("a");
-                        a.href = outUrl;
-                        a.download = fileName;
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        URL.revokeObjectURL(outUrl);
-                        logExportActivity("PNG");
-                    }, "image/png");
-                };
-
-                img.onerror = () => {
-                    URL.revokeObjectURL(url);
-                    toast.error("Failed to render SVG for export");
-                };
-
-                img.src = url;
-            } catch {
-                toast.error("Failed to export PNG from embedded diagram");
-            }
-        } else {
-            toast.error("No DFD available to export");
-        }
-    };
-
+    
     // Fallback: capture the whole DFD Viewer tab with html2canvas
     const handleExportPngFallback = async () => {
         const container = document.querySelector('[data-tab-content="dfd"]') as HTMLElement;
@@ -1108,6 +996,40 @@ export default function VerticalWorkspacePage() {
             await handleExportPdfFallback();
         } finally {
             setExportingPdf(false);
+        }
+    };
+
+    const handleExportPng = async () => {
+        if (exportingPng) return;
+        setExportingPng(true);
+
+        try {
+            const sessionId = pipelineSessionId || verticalId;
+            const res = await fetch(`/api/dfd/png/${sessionId}`, {
+                method: "GET",
+                credentials: "include",
+            });
+            
+            if (res.ok) {
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `dfd-${vertical?.name || sessionId}.png`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                toast.success("Downloaded PNG");
+                logExportActivity("PNG");
+            } else {
+                toast.error("Failed to download PNG");
+            }
+        } catch (error) {
+            console.error("PNG export error:", error);
+            toast.error("Failed to export PNG");
+        } finally {
+            setExportingPng(false);
         }
     };
 
@@ -2341,6 +2263,15 @@ export default function VerticalWorkspacePage() {
                                     variant="outline"
                                     size="sm"
                                     type="button"
+                                    onClick={handleExportPng}
+                                    disabled={exportingPng}
+                                >
+                                    {exportingPng ? "Exporting..." : "Export PNG"}
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    type="button"
                                     onClick={handleExportPdf}
                                     disabled={exportingPdf}
                                 >
@@ -2367,6 +2298,15 @@ export default function VerticalWorkspacePage() {
                     ) : hasGeneratedDfd && dfdData ? (
                         <div className="w-full relative min-h-[500px] min-w-0 overflow-x-auto">
                             <div className="flex justify-end mb-3 gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    type="button"
+                                    onClick={handleExportPng}
+                                    disabled={exportingPng}
+                                >
+                                    {exportingPng ? "Exporting..." : "Export PNG"}
+                                </Button>
                                 <Button
                                     variant="outline"
                                     size="sm"

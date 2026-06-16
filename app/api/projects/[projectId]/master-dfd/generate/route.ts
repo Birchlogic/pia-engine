@@ -5,7 +5,7 @@ import { SignJWT } from "jose";
 import { logActivity } from "@/lib/activity";
 import { formatError } from "@/lib/utils";
 
-const PIPELINE_API = process.env.DFD_API_BASE_URL || "http://3.91.197.195:8000";
+const PIPELINE_API = process.env.DFD_API_BASE_URL || "http://13.219.89.59:8000";
 
 function getPayloadSecret(): Uint8Array {
     const secret = process.env.PAYLOAD_TOKEN;
