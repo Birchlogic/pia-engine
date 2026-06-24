@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/auth-options";
 
-const DFD_API_BASE_URL = process.env.DFD_API_BASE_URL || "http://52.91.71.144:8000";
+const DFD_API_BASE_URL = process.env.DFD_API_BASE_URL || "http://18.207.121.162:8000";
 
 export async function GET(
     request: NextRequest,
